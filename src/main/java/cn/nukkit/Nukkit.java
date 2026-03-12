@@ -31,7 +31,7 @@ public class Nukkit {
 
     public final static String VERSION = "1.0dev";
     public final static String API_VERSION = "1.0.0";
-    public final static String CODENAME = "Nukkit-Retro";
+    public final static String CODENAME = "Retro";
     @Deprecated
     public final static String MINECRAFT_VERSION = ProtocolInfo.MINECRAFT_VERSION;
     @Deprecated

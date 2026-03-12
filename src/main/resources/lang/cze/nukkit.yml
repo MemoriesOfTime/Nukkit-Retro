@@ -30,8 +30,6 @@ network:
 debug:
  #Pokud je nastavena 1, console posílá debug zprávy
  level: 1
- #Povolení příkazů: /status /gc
- commands: false
 
 timings:
  #Povolit časování jádra a pluginů na výchozí hodnotu

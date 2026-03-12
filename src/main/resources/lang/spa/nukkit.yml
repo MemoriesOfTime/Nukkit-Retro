@@ -29,8 +29,6 @@ network:
 debug:
  #Si es mayor que 1, mostrara mensajes de depuración en la consola
  level: 1
- #Permitir los comandos: /status /gc
- commands: false
 
 timings:
  #Enable core and plugin timings by default

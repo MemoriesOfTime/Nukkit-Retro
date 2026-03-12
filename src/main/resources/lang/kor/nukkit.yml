@@ -29,8 +29,6 @@ network:
 debug:
  #설정값이 1보다 크면, 콘솔 메시지에 디버그 메시지를 표시합니다
  level: 1
- #명령어를 활성화합니다: /status /gc
- commands: false
 
 timings:
  #기본으로 코어와 플러그인 타이밍을 활성화합니다

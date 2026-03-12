@@ -28,8 +28,6 @@ network:
 debug:
  #当调试级别 > 1 时，将在控制台显示调试信息
  level: 1
- #启用命令 /status /gc
- commands: false
 
 timings:
  #Enable core and plugin timings by default

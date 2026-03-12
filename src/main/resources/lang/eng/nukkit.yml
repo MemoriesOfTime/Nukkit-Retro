@@ -29,8 +29,6 @@ network:
 debug:
  #If > 1, it will show debug messages in the console
  level: 1
- #Enables commands: /status /gc
- commands: false
 
 timings:
  #Enable core and plugin timings by default

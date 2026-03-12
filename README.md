@@ -1,6 +1,6 @@
-Nukkit
+Nukkit-Retro
 ===================
-![nukkit](https://github.com/Nukkit/Nukkit/blob/master/images/banner.png)
+![nukkit](/images/banner.png)
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Lesser General Public License as published by
@@ -16,70 +16,55 @@ Nukkit
 	along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-__A Nuclear-Powered Server Software For Minecraft: Pocket Edition__
-
-[![PayPayl donate button](https://img.shields.io/badge/paypal-donate-yellow.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=magicdroidx%40gmail%2ecom&lc=US&item_name=Nukkit&currency_code=USD&bn=PP%2dDonationsBF%3apaypal%2ddonate%2dyellow%2esvg%3aNonHostedGuest)
-[![Gitter](https://img.shields.io/gitter/room/Nukkit/Nukkit.js.svg?style=flat)](https://gitter.im/Nukkit/Nukkit)
-[![Travis](https://img.shields.io/travis/Nukkit/Nukkit.svg?style=flat)](https://travis-ci.org/Nukkit/Nukkit)
+__A Retro Nukkit Fork Focused On Legacy Minecraft: Pocket Edition Compatibility__
 
 Introduction
 -------------
 
-Nukkit is nuclear-powered server software for Minecraft: Pocket Edition.
-It has a few key advantages over other server software:
+Nukkit-Retro is a Nukkit fork based on the old NK codebase, maintained for legacy Minecraft: Pocket Edition support.
 
-* Written in Java, Nukkit is faster and more stable.
-* Having a friendly structure, it's easy to contribute to Nukkit's development and rewrite plugins from other platforms into Nukkit plugins.
+This branch is focused on compatibility for `1.1.x` and below:
 
-Nukkit is **under improvement** yet, we welcome contributions. 
+* Based on the old Nukkit / NK implementation, keeping the historical behavior and plugin ecosystem as much as possible
+* Focused on multi-version compatibility for `1.1.x` and earlier legacy clients
+* Does **not** target `1.2+` protocol support in this branch
 
-Get Nukkit & Plugins
---------------------
+Status
+-------------
 
-#### Recommended Sites
+This project currently targets the legacy protocol range below:
 
-* __[Official Site](https://nukkit.io)__
-* __[Jar Download at Circle CI](https://circleci.com/gh/Nukkit/Nukkit/tree/master/)__ (**login required**)
-* __[Discussion](#discussion)__
+* `0.15.x`
+* `0.16.0`
+* `1.0.x`
+* `1.1.x`
 
-*Thank you for visiting our official sites. Our official websites are provided free of charge, and we do not like to place ads on the home page affecting your reading. If you like this project, please [donate to us](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=magicdroidx%40gmail%2ecom&lc=US&item_name=Nukkit&currency_code=USD&bn=PP%2dDonationsBF%3apaypal%2ddonate%2dyellow%2esvg%3aNonHostedGuest). All the donations will only be used for Nukkit websites and services.*
-
-
-#### Unofficial Download Mirrors
-*These sites are provided by our users, Nukkit staff are not responsible for the reliability of these sites. Jar files downloaded here are only for reference - to try the latest update or for commercial uses, compile by yourself.*
-
-* __[Jenkins by MengCraft](http://ci.mengcraft.com:8080/job/Nukkit/lastSuccessfulBuild/)__ (**UNOFFICIAL**)
-* __[Yivesmirror](https://yivesmirror.com/downloads/nukkit)__ (**UNOFFICIAL**)
+If you need modern Bedrock support, this repository is not intended for that use case.
 
 Build JAR file
 -------------
-- `git submodule update --init`
 - `mvn clean`
 - `mvn package`
 
 Running
 -------------
-Simply run `start.sh` or `start.cmd`, or execute `java -jar Nukkit.jar`.
+Example:
+
+```bash
+java -jar nukkit-retro-SNAPSHOT.jar
+```
 
 Plugin API
 -------------
 #### **Example Plugin**
-Example Plugin which shows the API of Nukkit.
+Nukkit-Retro keeps the original Nukkit package structure and targets legacy plugin compatibility where possible.
 
 * __[Example Plugin](http://github.com/Nukkit/ExamplePlugin)__
 
-Development Tools
------------------
-There're some tools for Nukkit developers.
-
-* __[FDevTools](https://github.com/fengberd/FDevTools)__ (**Load source and pack them easily**)
-* __[PocketServer](https://github.com/fengberd/MinecraftPEServer)__ (**Run Nukkit on android devices**)
-
 Contributing
 ------------
-Please read the [CONTRIBUTING](https://github.com/Nukkit/Nukkit/blob/master/.github/CONTRIBUTING.md) guide before submitting any issue. Issues with insufficient information or in the wrong format will be closed and will not be reviewed.
+Contributions related to legacy compatibility, regression fixes, and `1.1.x` and below protocol support are welcome.
 
 Discussion
 -------------
-* __[Forums](https://forums.nukkit.io)__
-* __[百度 Nukkit 吧](http://tieba.baidu.com/f?kw=nukkit)__
+Please use the repository issue tracker and pull requests for discussion and collaboration.

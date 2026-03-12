@@ -29,8 +29,6 @@ network:
 debug:
  #Jeigu > 1, jis rodys derinimo pranešimus konsolėje
  level: 1
- #Įjungia komandas: /status /gc
- commands: false
 
 timings:
  #Enable core and plugin timings by default

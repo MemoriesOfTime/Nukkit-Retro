@@ -29,8 +29,6 @@ network:
 debug:
  #Se maior de 1, as mensagens para debug irão ser mostradas no console
  level: 1
- #Ativa os comandos: /status /gc
- commands: false
 
 timings:
  #Enable core and plugin timings by default

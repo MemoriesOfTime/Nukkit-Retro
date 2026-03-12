@@ -29,8 +29,6 @@ network:
 debug:
  #1より大きいと、コンソールにデバッグメッセージが表示されます
  level: 1
- # /status /gc　コマンドを有効にします（ベンチが見れるコマンド）
- commands: false
 
 timings:
  #コアとプラグインのtimingsをデフォルトで有効にする

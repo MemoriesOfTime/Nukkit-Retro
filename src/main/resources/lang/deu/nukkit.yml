@@ -29,8 +29,6 @@ network:
 debug:
  #Wenn > 1, werden Debug-Nachrichten in der Konsole angezeigt
  level: 1
- #Aktiviere Befehle: /status /gc
- commands: false
 
 timings:
  #Aktiviere Kern und Plugin timings als Standard
