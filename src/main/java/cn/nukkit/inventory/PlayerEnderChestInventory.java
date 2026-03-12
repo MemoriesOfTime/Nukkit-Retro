@@ -29,6 +29,7 @@ public class PlayerEnderChestInventory extends BaseInventory {
         ContainerOpenPacket containerOpenPacket = new ContainerOpenPacket();
         containerOpenPacket.windowid = (byte) who.getWindowId(this);
         containerOpenPacket.type = (byte) this.getType().getNetworkType();
+        containerOpenPacket.slots = this.getSize();
         BlockEnderChest chest = who.getViewingEnderChest();
         if (chest != null) {
             containerOpenPacket.x = (int) chest.getX();

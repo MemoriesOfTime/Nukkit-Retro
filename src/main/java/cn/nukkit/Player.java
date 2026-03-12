@@ -131,6 +131,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     protected boolean connected = true;
     protected final String ip;
     protected boolean removeFormat = true;
+    public int protocol = ProtocolInfo.CURRENT_PROTOCOL;
 
     protected final int port;
     protected String username;
@@ -464,11 +465,14 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     }
 
     public boolean isEnableClientCommand() {
-        return this.enableClientCommand;
+        return this.enableClientCommand && !(this.protocol < ProtocolInfo.v0_16_0);
     }
 
     public void setEnableClientCommand(boolean enable) {
         this.enableClientCommand = enable;
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            return;
+        }
         SetCommandsEnabledPacket pk = new SetCommandsEnabledPacket();
         pk.enabled = enable;
         this.dataPacket(pk);
@@ -476,6 +480,9 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     }
 
     public void sendCommandData() {
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            return;
+        }
         AvailableCommandsPacket pk = new AvailableCommandsPacket();
         Map<String, CommandDataVersions> data = new HashMap<>();
         int count = 0;
@@ -748,7 +755,9 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     protected void doFirstSpawn() {
         this.spawned = true;
 
-        this.server.sendRecipeList(this);
+        if (!(this.protocol < ProtocolInfo.v0_16_0)) {
+            this.server.sendRecipeList(this);
+        }
         this.getAdventureSettings().update();
 
         this.sendPotionEffects(this);
@@ -907,6 +916,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         }
 
         try (Timing timing = Timings.getSendDataPacketTiming(packet)) {
+            packet.protocol = this.protocol;
             DataPacketSendEvent ev = new DataPacketSendEvent(this, packet);
             this.server.getPluginManager().callEvent(ev);
             if (ev.isCancelled()) {
@@ -940,6 +950,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         }
 
         try (Timing timing = Timings.getSendDataPacketTiming(packet)) {
+            packet.protocol = this.protocol;
             DataPacketSendEvent ev = new DataPacketSendEvent(this, packet);
             this.server.getPluginManager().callEvent(ev);
             if (ev.isCancelled()) {
@@ -1467,14 +1478,21 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
     public void sendAttributes() {
         UpdateAttributesPacket pk = new UpdateAttributesPacket();
-        pk.entityId = this.getId();
-        pk.entries = new Attribute[]{
-                Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue(this.getMaxHealth()).setValue(health > 0 ? (health < getMaxHealth() ? health : getMaxHealth()) : 0),
-                Attribute.getAttribute(Attribute.MAX_HUNGER).setValue(this.getFoodData().getLevel()),
-                Attribute.getAttribute(Attribute.MOVEMENT_SPEED).setValue(this.getMovementSpeed()),
-                Attribute.getAttribute(Attribute.EXPERIENCE_LEVEL).setValue(this.getExperienceLevel()),
-                Attribute.getAttribute(Attribute.EXPERIENCE).setValue(((float) this.getExperience()) / calculateRequireExperience(this.getExperienceLevel()))
-        };
+        pk.entityId = (this.protocol < ProtocolInfo.v0_16_0) ? 0 : this.getId();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            pk.entries = new Attribute[]{
+                    Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue(this.getMaxHealth()).setValue(health > 0 ? (health < getMaxHealth() ? health : getMaxHealth()) : 0),
+                    Attribute.getAttribute(Attribute.MOVEMENT_SPEED).setValue(this.getMovementSpeed())
+            };
+        } else {
+            pk.entries = new Attribute[]{
+                    Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue(this.getMaxHealth()).setValue(health > 0 ? (health < getMaxHealth() ? health : getMaxHealth()) : 0),
+                    Attribute.getAttribute(Attribute.MAX_HUNGER).setValue(this.getFoodData().getLevel()),
+                    Attribute.getAttribute(Attribute.MOVEMENT_SPEED).setValue(this.getMovementSpeed()),
+                    Attribute.getAttribute(Attribute.EXPERIENCE_LEVEL).setValue(this.getExperienceLevel()),
+                    Attribute.getAttribute(Attribute.EXPERIENCE).setValue(((float) this.getExperience()) / calculateRequireExperience(this.getExperienceLevel()))
+            };
+        }
         this.dataPacket(pk);
     }
 
@@ -1842,11 +1860,31 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         startGamePacket.levelId = "";
         startGamePacket.worldName = this.getServer().getNetwork().getName();
         startGamePacket.generator = 1; //0 old, 1 infinite, 2 flat
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            startGamePacket.entityUniqueId = 0;
+            startGamePacket.entityRuntimeId = 0;
+            startGamePacket.b1 = true;
+            startGamePacket.b2 = true;
+            startGamePacket.b3 = false;
+            startGamePacket.unknownstr = "";
+        }
         this.dataPacket(startGamePacket);
 
         SetTimePacket setTimePacket = new SetTimePacket();
         setTimePacket.time = this.level.getTime();
         this.dataPacket(setTimePacket);
+
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            SetSpawnPositionPacket setSpawnPositionPacket = new SetSpawnPositionPacket();
+            setSpawnPositionPacket.x = (int) spawnPosition.x;
+            setSpawnPositionPacket.y = (int) spawnPosition.y;
+            setSpawnPositionPacket.z = (int) spawnPosition.z;
+            this.dataPacket(setSpawnPositionPacket);
+
+            SetDifficultyPacket setDifficultyPacket = new SetDifficultyPacket();
+            setDifficultyPacket.difficulty = this.server.getDifficulty();
+            this.dataPacket(setDifficultyPacket);
+        }
 
         this.setMovementSpeed(DEFAULT_SPEED);
         this.sendAttributes();
@@ -1896,6 +1934,9 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         }
 
         try (Timing timing = Timings.getReceiveDataPacketTiming(packet)) {
+            if (packet.protocol == Integer.MAX_VALUE) {
+                packet.protocol = this.protocol;
+            }
             DataPacketReceiveEvent ev = new DataPacketReceiveEvent(this, packet);
             this.server.getPluginManager().callEvent(ev);
             if (ev.isCancelled()) {
@@ -1919,23 +1960,18 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     LoginPacket loginPacket = (LoginPacket) packet;
 
                     String message;
-                    if (loginPacket.getProtocol() != ProtocolInfo.CURRENT_PROTOCOL) {
-                        if (loginPacket.getProtocol() < ProtocolInfo.CURRENT_PROTOCOL) {
-                            message = "disconnectionScreen.outdatedClient";
+                    if (!ProtocolInfo.isSupportedProtocol(loginPacket.getProtocol())) {
+                        message = "disconnectionScreen.outdatedServer";
 
-                            PlayStatusPacket pk = new PlayStatusPacket();
-                            pk.status = PlayStatusPacket.LOGIN_FAILED_CLIENT;
-                            this.directDataPacket(pk);
-                        } else {
-                            message = "disconnectionScreen.outdatedServer";
-
-                            PlayStatusPacket pk = new PlayStatusPacket();
-                            pk.status = PlayStatusPacket.LOGIN_FAILED_SERVER;
-                            this.directDataPacket(pk);
-                        }
+                        PlayStatusPacket pk = new PlayStatusPacket();
+                        pk.protocol = ProtocolInfo.CURRENT_PROTOCOL;
+                        pk.status = PlayStatusPacket.LOGIN_FAILED_SERVER;
+                        this.directDataPacket(pk);
                         this.close("", message, false);
                         break;
                     }
+
+                    this.protocol = loginPacket.getProtocol();
 
                     this.username = TextFormat.clean(loginPacket.username);
                     this.displayName = this.username;
@@ -1997,6 +2033,11 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     PlayStatusPacket statusPacket = new PlayStatusPacket();
                     statusPacket.status = PlayStatusPacket.LOGIN_SUCCESS;
                     this.dataPacket(statusPacket);
+
+                    if ((this.protocol < ProtocolInfo.v0_16_0)) {
+                        this.processLogin();
+                        break;
+                    }
 
                     ResourcePacksInfoPacket infoPacket = new ResourcePacksInfoPacket();
                     infoPacket.resourcePackEntries = this.server.getResourcePackManager().getResourceStack();

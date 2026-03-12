@@ -34,11 +34,18 @@ public class AdventureSettingsPacket extends DataPacket {
 
     public int flags = 0;
     public int userPermission;
+    public int globalPermission;
 
     @Override
     public void decode() {
-        this.flags = (int) this.getUnsignedVarInt();
-        this.userPermission = (int) this.getUnsignedVarInt();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.flags = this.getInt();
+            this.userPermission = this.getInt();
+            this.globalPermission = this.getInt();
+        } else {
+            this.flags = (int) this.getUnsignedVarInt();
+            this.userPermission = (int) this.getUnsignedVarInt();
+        }
         this.worldImmutable = (this.flags & 1) != 0;
         this.noPvp = (this.flags & (1 << 1)) != 0;
         this.noPvm = (this.flags & (1 << 2)) != 0;
@@ -49,12 +56,13 @@ public class AdventureSettingsPacket extends DataPacket {
         this.noClip = (this.flags & (1 << 7)) != 0;
         this.worldBuilder = (this.flags & (1 << 8)) != 0;
         this.isFlying = (this.flags & (1 << 9)) != 0;
-        this.muted = (this.flags & (1 << 10)) != 0;
+        this.muted = !ProtocolInfo.isLegacyProtocol(this.protocol) && (this.flags & (1 << 10)) != 0;
     }
 
     @Override
     public void encode() {
         this.reset();
+        this.flags = 0;
         if (this.worldImmutable) this.flags |= 1;
         if (this.noPvp) this.flags |= 1 << 1;
         if (this.noPvm) this.flags |= 1 << 2;
@@ -65,9 +73,15 @@ public class AdventureSettingsPacket extends DataPacket {
         if (this.noClip) this.flags |= 1 << 7;
         if (this.worldBuilder) this.flags |= 1 << 8;
         if (this.isFlying) this.flags |= 1 << 9;
-        if (this.muted) this.flags |= 1 << 10;
-        this.putUnsignedVarInt(this.flags);
-        this.putUnsignedVarInt(this.userPermission);
+        if (!ProtocolInfo.isLegacyProtocol(this.protocol) && this.muted) this.flags |= 1 << 10;
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putInt(this.flags);
+            this.putInt(this.userPermission);
+            this.putInt(this.globalPermission);
+        } else {
+            this.putUnsignedVarInt(this.flags);
+            this.putUnsignedVarInt(this.userPermission);
+        }
     }
 
     @Override

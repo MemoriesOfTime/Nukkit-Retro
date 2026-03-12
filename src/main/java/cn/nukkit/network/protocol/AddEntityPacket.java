@@ -39,20 +39,52 @@ public class AddEntityPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putVarLong(this.entityUniqueId);
-        this.putVarLong(this.entityRuntimeId);
-        this.putUnsignedVarInt(this.type);
-        this.putVector3f(this.x, this.y, this.z);
-        this.putVector3f(this.speedX, this.speedY, this.speedZ);
-        this.putLFloat(this.pitch);
-        this.putLFloat(this.yaw);
-        this.putAttributeList(this.attributes);
-        this.put(Binary.writeMetadata(this.metadata));
-        this.putUnsignedVarInt(this.links.length);
-        for (Object[] link : this.links) {
-            this.putVarLong((long) link[0]);
-            this.putVarLong((long) link[1]);
-            this.putByte((byte) link[2]);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putLong(this.entityRuntimeId);
+            this.putInt(this.type);
+            this.putFloat(this.x);
+            this.putFloat(this.y);
+            this.putFloat(this.z);
+            this.putFloat(this.speedX);
+            this.putFloat(this.speedY);
+            this.putFloat(this.speedZ);
+            if (this.protocol == ProtocolInfo.v0_15_0) {
+                this.putFloat(this.yaw);
+                this.putFloat(this.pitch);
+            } else {
+                this.putFloat(this.yaw * 0.71f);
+                this.putFloat(this.pitch * 0.71f);
+                this.putInt(0);
+            }
+            this.put(Binary.writeMetadata(this.metadata));
+            this.putShort(this.links.length);
+            for (Object[] link : this.links) {
+                this.putLong((long) link[0]);
+                this.putLong((long) link[1]);
+                this.putByte((byte) link[2]);
+            }
+        } else {
+            this.putVarLong(this.entityUniqueId);
+            this.putVarLong(this.entityRuntimeId);
+            this.putUnsignedVarInt(this.type);
+            this.putVector3f(this.x, this.y, this.z);
+            this.putVector3f(this.speedX, this.speedY, this.speedZ);
+            if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+                this.putLFloat(this.pitch * (256f / 360f));
+                this.putLFloat(this.yaw * (256f / 360f));
+                this.putUnsignedVarInt(0);
+            } else {
+                this.putLFloat(this.pitch);
+                this.putLFloat(this.yaw);
+                this.putAttributeList(this.attributes);
+            }
+            this.put(Binary.writeMetadata(this.metadata));
+            this.putUnsignedVarInt(this.links.length);
+            for (Object[] link : this.links) {
+                this.putVarLong((long) link[0]);
+                this.putVarLong((long) link[1]);
+                this.putByte((byte) link[2]);
+            }
         }
     }
 }

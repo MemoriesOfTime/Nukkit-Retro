@@ -35,11 +35,26 @@ public class AddItemEntityPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putVarLong(this.entityUniqueId);
-        this.putVarLong(this.entityRuntimeId);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putLong(this.entityRuntimeId);
+        } else {
+            this.putVarLong(this.entityUniqueId);
+            this.putVarLong(this.entityRuntimeId);
+        }
         this.putSlot(this.item);
-        this.putVector3f(this.x, this.y, this.z);
-        this.putVector3f(this.speedX, this.speedY, this.speedZ);
-        this.put(Binary.writeMetadata(metadata));
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putFloat(this.x);
+            this.putFloat(this.y);
+            this.putFloat(this.z);
+            this.putFloat(this.speedX);
+            this.putFloat(this.speedY);
+            this.putFloat(this.speedZ);
+        } else {
+            this.putVector3f(this.x, this.y, this.z);
+            this.putVector3f(this.speedX, this.speedY, this.speedZ);
+        }
+        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.put(Binary.writeMetadata(metadata));
+        }
     }
 }

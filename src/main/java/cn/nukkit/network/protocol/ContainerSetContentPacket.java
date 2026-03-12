@@ -34,27 +34,61 @@ public class ContainerSetContentPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.windowid = (int) this.getUnsignedVarInt();
-        this.eid = this.getVarLong();
-        int count = (int) this.getUnsignedVarInt();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.windowid = this.getByte();
+            this.eid = 0;
+        } else if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.windowid = this.getByte();
+            this.eid = 0;
+        } else {
+            this.windowid = this.getUnsignedVarInt();
+            this.eid = this.getVarLong();
+        }
+        int count = (this.protocol < ProtocolInfo.v0_16_0) ? this.getShort() : (int) this.getUnsignedVarInt();
         this.slots = new Item[count];
 
         for (int s = 0; s < count && !this.feof(); ++s) {
             this.slots[s] = this.getSlot();
         }
 
-        count = (int) this.getUnsignedVarInt();
-        this.hotbar = new int[count];
-        for (int s = 0; s < count && !this.feof(); ++s) {
-            this.hotbar[s] = this.getVarInt();
+        if ((ProtocolInfo.isLegacyProtocol(this.protocol) && this.windowid != SPECIAL_INVENTORY)) {
+            this.hotbar = new int[0];
+        } else {
+            count = (this.protocol < ProtocolInfo.v0_16_0) ? this.getShort() : (int) this.getUnsignedVarInt();
+            this.hotbar = new int[count];
+            for (int s = 0; s < count && !this.feof(); ++s) {
+                this.hotbar[s] = (this.protocol < ProtocolInfo.v0_16_0) ? this.getInt() : this.getVarInt();
+            }
         }
     }
 
     @Override
     public void encode() {
         this.reset();
-        this.putUnsignedVarInt(this.windowid);
-        this.putVarLong(this.eid);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putByte((byte) this.windowid);
+            this.putShort(this.slots.length);
+            for (Item slot : this.slots) {
+                this.putSlot(slot);
+            }
+
+            if (this.windowid == SPECIAL_INVENTORY && this.hotbar.length > 0) {
+                this.putShort(this.hotbar.length);
+                for (int slot : this.hotbar) {
+                    this.putInt(slot);
+                }
+            } else {
+                this.putShort(0);
+            }
+            return;
+        }
+
+        if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putByte((byte) this.windowid);
+        } else {
+            this.putUnsignedVarInt(this.windowid);
+            this.putVarLong(this.eid);
+        }
         this.putUnsignedVarInt(this.slots.length);
         for (Item slot : this.slots) {
             this.putSlot(slot);

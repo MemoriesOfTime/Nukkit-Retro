@@ -24,9 +24,19 @@ public class SetSpawnPositionPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putVarInt(this.spawnType);
-        this.putBlockCoords(this.x, this.y, this.z);
-        this.putBoolean(this.spawnForced);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putInt(this.x);
+            this.putInt(this.y);
+            this.putInt(this.z);
+        } else if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putUnsignedVarInt(this.spawnType);
+            this.putBlockCoords(this.x, this.y, this.z);
+            this.putBoolean(this.spawnForced);
+        } else {
+            this.putVarInt(this.spawnType);
+            this.putBlockCoords(this.x, this.y, this.z);
+            this.putBoolean(this.spawnForced);
+        }
     }
 
     @Override

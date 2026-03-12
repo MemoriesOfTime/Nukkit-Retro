@@ -126,7 +126,8 @@ public class LevelSoundEventPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.sound = this.getByte();
+        int rawSound = this.getByte();
+        this.sound = ProtocolInfo.isLegacyProtocol(this.protocol) ? fromLegacySound(rawSound) : rawSound;
         Vector3f v = this.getVector3f();
         this.x = v.x;
         this.y = v.y;
@@ -140,7 +141,7 @@ public class LevelSoundEventPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putByte((byte) this.sound);
+        this.putByte((byte) (ProtocolInfo.isLegacyProtocol(this.protocol) ? toLegacySound(this.sound) : this.sound));
         this.putVector3f(this.x, this.y, this.z);
         this.putVarInt(this.extraData);
         this.putVarInt(this.pitch);
@@ -151,5 +152,43 @@ public class LevelSoundEventPacket extends DataPacket {
     @Override
     public byte pid() {
         return NETWORK_ID;
+    }
+
+    private int toLegacySound(int sound) {
+        if (sound <= SOUND_CHEST_CLOSED) {
+            return sound;
+        }
+        if (sound == SOUND_SHULKERBOX_OPEN || sound == SOUND_SHULKERBOX_CLOSED) {
+            return 95;
+        }
+        if (sound >= SOUND_POWER_ON && sound <= SOUND_HAGGLE_IDLE) {
+            return sound - 2;
+        }
+        if (sound >= SOUND_CHORUSGROW && sound <= SOUND_CAMERA_TAKE_PICTURE) {
+            return 95;
+        }
+        if (sound == SOUND_DEFAULT) {
+            return 94;
+        }
+        if (sound == SOUND_UNDEFINED) {
+            return 95;
+        }
+        return 95;
+    }
+
+    private int fromLegacySound(int sound) {
+        if (sound <= 61) {
+            return sound;
+        }
+        if (sound >= 62 && sound <= 93) {
+            return sound + 2;
+        }
+        if (sound == 94) {
+            return SOUND_DEFAULT;
+        }
+        if (sound == 95) {
+            return SOUND_UNDEFINED;
+        }
+        return SOUND_UNDEFINED;
     }
 }

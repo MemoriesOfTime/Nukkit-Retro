@@ -24,18 +24,34 @@ public class UpdateAttributesPacket extends DataPacket {
     public void encode() {
         this.reset();
 
-        this.putVarLong(this.entityId);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putLong(this.entityId);
 
-        if (this.entries == null) {
-            this.putUnsignedVarInt(0);
+            if (this.entries == null) {
+                this.putShort(0);
+            } else {
+                this.putShort(this.entries.length);
+                for (Attribute entry : this.entries) {
+                    this.putFloat(entry.getMinValue());
+                    this.putFloat(entry.getMaxValue());
+                    this.putFloat(entry.getValue());
+                    this.putString(entry.getName());
+                }
+            }
         } else {
-            this.putUnsignedVarInt(this.entries.length);
-            for (Attribute entry : this.entries) {
-                this.putLFloat(entry.getMinValue());
-                this.putLFloat(entry.getMaxValue());
-                this.putLFloat(entry.getValue());
-                this.putLFloat(entry.getDefaultValue());
-                this.putString(entry.getName());
+            this.putVarLong(this.entityId);
+
+            if (this.entries == null) {
+                this.putUnsignedVarInt(0);
+            } else {
+                this.putUnsignedVarInt(this.entries.length);
+                for (Attribute entry : this.entries) {
+                    this.putLFloat(entry.getMinValue());
+                    this.putLFloat(entry.getMaxValue());
+                    this.putLFloat(entry.getValue());
+                    this.putLFloat(entry.getDefaultValue());
+                    this.putString(entry.getName());
+                }
             }
         }
     }

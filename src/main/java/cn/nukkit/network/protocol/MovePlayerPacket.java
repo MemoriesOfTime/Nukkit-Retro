@@ -29,37 +29,65 @@ public class MovePlayerPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.eid = this.getVarLong();
-        Vector3f v = this.getVector3f();
-        this.x = v.x;
-        this.y = v.y;
-        this.z = v.z;
-        this.pitch = this.getLFloat();
-        this.headYaw = this.getLFloat();
-        this.yaw = this.getLFloat();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.eid = this.getLong();
+            this.x = this.getFloat();
+            this.y = this.getFloat();
+            this.z = this.getFloat();
+            this.yaw = this.getFloat();
+            this.headYaw = this.getFloat();
+            this.pitch = this.getFloat();
+        } else {
+            this.eid = this.getVarLong();
+            Vector3f v = this.getVector3f();
+            this.x = v.x;
+            this.y = v.y;
+            this.z = v.z;
+            this.pitch = this.getLFloat();
+            this.headYaw = this.getLFloat();
+            this.yaw = this.getLFloat();
+        }
         this.mode = (byte) this.getByte();
-        this.onGround = this.getBoolean();
-        this.ridingEid = this.getVarLong();
-        if (this.mode == MODE_TELEPORT){
-            this.int1 = this.getLInt();
-            this.int2 = this.getLInt();
+        this.onGround = (this.protocol < ProtocolInfo.v0_16_0) ? this.getByte() > 0 : this.getBoolean();
+        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.ridingEid = this.getVarLong();
+            if (this.mode == MODE_TELEPORT){
+                this.int1 = this.getLInt();
+                this.int2 = this.getLInt();
+            }
         }
     }
 
     @Override
     public void encode() {
         this.reset();
-        this.putVarLong(this.eid);
-        this.putVector3f(this.x, this.y, this.z);
-        this.putLFloat(this.pitch);
-        this.putLFloat(this.yaw);
-        this.putLFloat(this.headYaw);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putLong(this.eid);
+            this.putFloat(this.x);
+            this.putFloat(this.y);
+            this.putFloat(this.z);
+            this.putFloat(this.yaw);
+            this.putFloat(this.headYaw);
+            this.putFloat(this.pitch);
+        } else {
+            this.putVarLong(this.eid);
+            this.putVector3f(this.x, this.y, this.z);
+            this.putLFloat(this.pitch);
+            this.putLFloat(this.yaw);
+            this.putLFloat(this.headYaw);
+        }
         this.putByte(this.mode);
-        this.putBoolean(this.onGround);
-        this.putVarLong(this.ridingEid);
-        if (this.mode == MODE_TELEPORT){
-            this.putLInt(this.int1);
-            this.putLInt(this.int2);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putByte(this.onGround ? (byte) 1 : 0);
+        } else {
+            this.putBoolean(this.onGround);
+        }
+        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putVarLong(this.ridingEid);
+            if (this.mode == MODE_TELEPORT){
+                this.putLInt(this.int1);
+                this.putLInt(this.int2);
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package cn.nukkit.network.protocol;
 
 import cn.nukkit.entity.data.Skin;
+import cn.nukkit.utils.Zlib;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
@@ -20,7 +21,7 @@ public class LoginPacket extends DataPacket {
     public static final byte NETWORK_ID = ProtocolInfo.LOGIN_PACKET;
 
     public String username;
-    public int protocol;
+    public int clientProtocol;
     public byte gameEdition;
     public UUID clientUUID;
     public long clientId;
@@ -34,9 +35,29 @@ public class LoginPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.protocol = this.getInt();
-        this.gameEdition = (byte) this.getByte();
-        this.setBuffer(this.getByteArray(), 0);
+        this.clientProtocol = this.getInt();
+        if ((this.clientProtocol < ProtocolInfo.v0_16_0)) {
+            byte[] str;
+            try {
+                str = Zlib.inflate(this.get(this.getInt()), 64 * 1024 * 1024);
+            } catch (Exception e) {
+                return;
+            }
+            this.setBuffer(str, 0);
+        } else {
+            this.gameEdition = (byte) this.getByte();
+            if (ProtocolInfo.isLegacyProtocol(this.clientProtocol)) {
+                byte[] str;
+                try {
+                    str = Zlib.inflate(this.get((int) this.getUnsignedVarInt()), 64 * 1024 * 1024);
+                } catch (Exception e) {
+                    return;
+                }
+                this.setBuffer(str, 0);
+            } else {
+                this.setBuffer(this.getByteArray(), 0);
+            }
+        }
         decodeChainData();
         decodeSkinData();
     }
@@ -47,7 +68,7 @@ public class LoginPacket extends DataPacket {
     }
 
     public int getProtocol() {
-        return protocol;
+        return clientProtocol;
     }
 
     private void decodeChainData() {

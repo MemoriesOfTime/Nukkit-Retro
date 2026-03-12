@@ -6,6 +6,8 @@ package cn.nukkit.network.protocol;
  */
 public class FullChunkDataPacket extends DataPacket {
     public static final byte NETWORK_ID = ProtocolInfo.FULL_CHUNK_DATA_PACKET;
+    public static final byte ORDER_COLUMNS = 0;
+    public static final byte ORDER_LAYERED = 1;
 
     @Override
     public byte pid() {
@@ -14,6 +16,7 @@ public class FullChunkDataPacket extends DataPacket {
 
     public int chunkX;
     public int chunkZ;
+    public byte order = ORDER_COLUMNS;
     public byte[] data;
 
     @Override
@@ -24,8 +27,16 @@ public class FullChunkDataPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putVarInt(this.chunkX);
-        this.putVarInt(this.chunkZ);
-        this.putByteArray(this.data);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putInt(this.chunkX);
+            this.putInt(this.chunkZ);
+            this.putByte(this.order);
+            this.putInt(this.data.length);
+            this.put(this.data);
+        } else {
+            this.putVarInt(this.chunkX);
+            this.putVarInt(this.chunkZ);
+            this.putByteArray(this.data);
+        }
     }
 }

@@ -22,20 +22,26 @@ public class MobEquipmentPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.eid = this.getVarLong(); //EntityRuntimeID
+        this.eid = (this.protocol < ProtocolInfo.v0_16_0) ? this.getLong() : this.getVarLong(); //EntityRuntimeID
         this.item = this.getSlot();
         this.slot = this.getByte();
         this.selectedSlot = this.getByte();
-        this.windowId = this.getByte();
+        this.windowId = ProtocolInfo.isLegacyProtocol(this.protocol) || this.feof() ? 0 : this.getByte();
     }
 
     @Override
     public void encode() {
         this.reset();
-        this.putVarLong(this.eid); //EntityRuntimeID
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putLong(this.eid);
+        } else {
+            this.putVarLong(this.eid); //EntityRuntimeID
+        }
         this.putSlot(this.item);
         this.putByte((byte) this.slot);
         this.putByte((byte) this.selectedSlot);
-        this.putByte((byte) this.windowId);
+        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putByte((byte) this.windowId);
+        }
     }
 }

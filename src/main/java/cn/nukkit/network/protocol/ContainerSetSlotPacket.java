@@ -23,19 +23,31 @@ public class ContainerSetSlotPacket extends DataPacket {
     @Override
     public void decode() {
         this.windowid = this.getByte();
-        this.slot = this.getVarInt();
-        this.hotbarSlot = this.getVarInt();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.slot = this.getShort();
+            this.hotbarSlot = this.getShort();
+        } else {
+            this.slot = this.getVarInt();
+            this.hotbarSlot = this.getVarInt();
+        }
         this.item = this.getSlot();
-        this.selectedSlot = this.getByte();
+        this.selectedSlot = (this.protocol < ProtocolInfo.v0_16_0) || this.feof() ? 0 : this.getByte();
     }
 
     @Override
     public void encode() {
         this.reset();
         this.putByte((byte) this.windowid);
-        this.putVarInt(this.slot);
-        this.putVarInt(this.hotbarSlot);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putShort(this.slot);
+            this.putShort(this.hotbarSlot);
+        } else {
+            this.putVarInt(this.slot);
+            this.putVarInt(this.hotbarSlot);
+        }
         this.putSlot(this.item);
-        this.putByte((byte) this.selectedSlot);
+        if (!(this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putByte((byte) this.selectedSlot);
+        }
     }
 }

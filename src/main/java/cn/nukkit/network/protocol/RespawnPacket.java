@@ -15,16 +15,28 @@ public class RespawnPacket extends DataPacket {
 
     @Override
     public void decode() {
-        Vector3f v = this.getVector3f();
-        this.x = v.x;
-        this.y = v.y;
-        this.z = v.z;
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.x = this.getFloat();
+            this.y = this.getFloat();
+            this.z = this.getFloat();
+        } else {
+            Vector3f v = this.getVector3f();
+            this.x = v.x;
+            this.y = v.y;
+            this.z = v.z;
+        }
     }
 
     @Override
     public void encode() {
         this.reset();
-        this.putVector3f(this.x, this.y, this.z);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putFloat(this.x);
+            this.putFloat(this.y);
+            this.putFloat(this.z);
+        } else {
+            this.putVector3f(this.x, this.y, this.z);
+        }
     }
 
     @Override

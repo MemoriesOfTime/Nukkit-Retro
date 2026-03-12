@@ -38,21 +38,35 @@ public class UseItemPacket extends DataPacket {
 
     @Override
     public void decode() {
-        BlockVector3 v = this.getBlockCoords();
-        this.x = v.x;
-        this.y = v.y;
-        this.z = v.z;
-        this.interactBlockId = (int) this.getUnsignedVarInt();
-        this.face = this.getVarInt();
-        Vector3f faceVector3 = this.getVector3f();
-        this.fx = faceVector3.x;
-        this.fy = faceVector3.y;
-        this.fz = faceVector3.z;
-        Vector3f playerPos = this.getVector3f();
-        this.posX = playerPos.x;
-        this.posY = playerPos.y;
-        this.posZ = playerPos.z;
-        this.slot = this.getByte();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.x = this.getInt();
+            this.y = this.getInt();
+            this.z = this.getInt();
+            this.face = this.getByte();
+            this.fx = this.getFloat();
+            this.fy = this.getFloat();
+            this.fz = this.getFloat();
+            this.posX = this.getFloat();
+            this.posY = this.getFloat();
+            this.posZ = this.getFloat();
+            this.slot = this.getInt();
+        } else {
+            BlockVector3 v = this.getBlockCoords();
+            this.x = v.x;
+            this.y = v.y;
+            this.z = v.z;
+            this.interactBlockId = (int) this.getUnsignedVarInt();
+            this.face = this.getVarInt();
+            Vector3f faceVector3 = this.getVector3f();
+            this.fx = faceVector3.x;
+            this.fy = faceVector3.y;
+            this.fz = faceVector3.z;
+            Vector3f playerPos = this.getVector3f();
+            this.posX = playerPos.x;
+            this.posY = playerPos.y;
+            this.posZ = playerPos.z;
+            this.slot = this.getByte();
+        }
         this.item = this.getSlot();
     }
 

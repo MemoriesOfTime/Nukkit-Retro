@@ -32,6 +32,16 @@ public class MobEffectPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putLong(this.eid);
+            this.putByte((byte) this.eventId);
+            this.putByte((byte) this.effectId);
+            this.putByte((byte) this.amplifier);
+            this.putBoolean(this.particles);
+            this.putInt(this.duration);
+            return;
+        }
+
         this.putVarLong(this.eid);
         this.putByte((byte) this.eventId);
         this.putVarInt(this.effectId);

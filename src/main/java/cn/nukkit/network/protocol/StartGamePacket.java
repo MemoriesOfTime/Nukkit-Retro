@@ -30,6 +30,10 @@ public class StartGamePacket extends DataPacket {
     public int spawnX;
     public int spawnY;
     public int spawnZ;
+    public boolean b1 = true;
+    public boolean b2 = true;
+    public boolean b3 = false;
+    public String unknownstr = "";
     public boolean hasAchievementsDisabled = true;
     public int dayCycleStopTime = -1; //-1 = not stopped, any positive value = stopped at that time
     public boolean eduMode = false;
@@ -52,12 +56,38 @@ public class StartGamePacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putInt(this.seed);
+            this.putByte(this.dimension);
+            this.putInt(this.generator);
+            this.putInt(this.gamemode);
+            this.putLong(this.entityUniqueId);
+            this.putInt(this.spawnX);
+            this.putInt(this.spawnY);
+            this.putInt(this.spawnZ);
+            this.putFloat(this.x);
+            this.putFloat(this.y);
+            this.putFloat(this.z);
+            this.putBoolean(this.b1);
+            this.putBoolean(this.b2);
+            this.putBoolean(this.b3);
+            this.putString(this.unknownstr);
+            return;
+        }
+
         this.putVarLong(this.entityUniqueId);
         this.putVarLong(this.entityRuntimeId);
-        this.putVarInt(this.playerGamemode);
+        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putVarInt(this.playerGamemode);
+        }
         this.putVector3f(this.x, this.y, this.z);
-        this.putLFloat(this.yaw);
-        this.putLFloat(this.pitch);
+        if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putLFloat(0);
+            this.putLFloat(0);
+        } else {
+            this.putLFloat(this.yaw);
+            this.putLFloat(this.pitch);
+        }
         this.putVarInt(this.seed);
         this.putVarInt(this.dimension);
         this.putVarInt(this.generator);
@@ -71,15 +101,19 @@ public class StartGamePacket extends DataPacket {
         this.putLFloat(this.lightningLevel);
         this.putBoolean(this.commandsEnabled);
         this.putBoolean(this.isTexturePacksRequired);
-        this.putUnsignedVarInt(this.ruleDatas.length);
-        for (RuleData rule : this.ruleDatas) {
-            this.putRuleData(rule);
+        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putUnsignedVarInt(this.ruleDatas.length);
+            for (RuleData rule : this.ruleDatas) {
+                this.putRuleData(rule);
+            }
         }
         this.putString(this.levelId);
         this.putString(this.worldName);
-        this.putString(this.premiumWorldTemplateId);
-        this.putBoolean(this.unknown);
-        this.putLLong(this.currentTick);
+        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putString(this.premiumWorldTemplateId);
+            this.putBoolean(this.unknown);
+            this.putLLong(this.currentTick);
+        }
     }
 
 }

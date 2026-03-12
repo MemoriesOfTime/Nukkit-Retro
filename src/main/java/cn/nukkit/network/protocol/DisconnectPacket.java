@@ -16,15 +16,24 @@ public class DisconnectPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.hideDisconnectionScreen = this.getBoolean();
-        this.message = this.getString();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.hideDisconnectionScreen = false;
+            this.message = this.getString();
+        } else {
+            this.hideDisconnectionScreen = this.getBoolean();
+            this.message = this.feof() ? "" : this.getString();
+        }
     }
 
     @Override
     public void encode() {
         this.reset();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putString(this.message);
+            return;
+        }
         this.putBoolean(this.hideDisconnectionScreen);
-        if (!this.hideDisconnectionScreen) {
+        if (ProtocolInfo.isLegacyProtocol(this.protocol) || !this.hideDisconnectionScreen) {
             this.putString(this.message);
         }
     }

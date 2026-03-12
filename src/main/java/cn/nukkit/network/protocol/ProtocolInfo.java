@@ -1,18 +1,50 @@
 package cn.nukkit.network.protocol;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * author: MagicDroidX & iNevet
  * Nukkit Project
  */
 public interface ProtocolInfo {
 
-    /**
-     * Actual Minecraft: PE protocol version
-     */
-    byte CURRENT_PROTOCOL = Integer.valueOf("113").byteValue(); //plugins can change it
+    int v0_15_0 = 81;
+    int v0_15_4 = 82;
+    int v0_15_9 = 83;
+    int v0_15_10 = 84;
+    int v0_16_0 = 91;
+    int v1_0_0 = 100;
+    int v1_0_3 = 101;
+    int v1_0_4 = 102;
+    int v1_0_5 = 105;
+    int v1_0_6 = 106;
+    int v1_0_7 = 107;
+    int v1_1_0 = 113;
 
-    String MINECRAFT_VERSION = "v1.1.3";
-    String MINECRAFT_VERSION_NETWORK = "1.1.3";
+    /**
+     * 当前分支只维护 1.1.x 及以下，不引入 1.2+ 协议。
+     */
+    int CURRENT_PROTOCOL = v1_1_0;
+
+    List<Integer> SUPPORTED_PROTOCOLS = Collections.unmodifiableList(Arrays.asList(
+            v0_15_0,
+            v0_15_4,
+            v0_15_9,
+            v0_15_10,
+            v0_16_0,
+            v1_0_0,
+            v1_0_3,
+            v1_0_4,
+            v1_0_5,
+            v1_0_6,
+            v1_0_7,
+            v1_1_0
+    ));
+
+    String MINECRAFT_VERSION_NETWORK = getMinecraftVersion(CURRENT_PROTOCOL);
+    String MINECRAFT_VERSION = "v" + MINECRAFT_VERSION_NETWORK;
 
     byte LOGIN_PACKET = 0x01;
     byte PLAY_STATUS_PACKET = 0x02;
@@ -106,4 +138,68 @@ public interface ProtocolInfo {
     byte ADD_BEHAVIOR_TREE_PACKET = 0x5a;
     byte STRUCTURE_BLOCK_UPDATE_PACKET = 0x5b;
     byte BATCH_PACKET = (byte) 0xff;
+
+    static boolean isSupportedProtocol(int protocol) {
+        return SUPPORTED_PROTOCOLS.contains(protocol);
+    }
+
+    static boolean isLegacyProtocol(int protocol) {
+        return protocol < v1_1_0;
+    }
+
+    static int getPacketPoolProtocol(int protocol) {
+        switch (protocol) {
+            case v0_15_0:
+                return v0_15_0;
+            case v0_15_4:
+            case v0_15_9:
+            case v0_15_10:
+                return v0_15_10;
+            case v0_16_0:
+                return v0_16_0;
+            case v1_0_0:
+                return v1_0_0;
+            case v1_0_3:
+                return v1_0_3;
+            case v1_0_4:
+                return v1_0_4;
+            case v1_0_5:
+            case v1_0_6:
+            case v1_0_7:
+                return v1_0_5;
+            case v1_1_0:
+            default:
+                return v1_1_0;
+        }
+    }
+
+    static String getMinecraftVersion(int protocol) {
+        switch (protocol) {
+            case v0_15_0:
+                return "0.15.0";
+            case v0_15_4:
+                return "0.15.4";
+            case v0_15_9:
+                return "0.15.9";
+            case v0_15_10:
+                return "0.15.10";
+            case v0_16_0:
+                return "0.16.0";
+            case v1_0_0:
+                return "1.0.0";
+            case v1_0_3:
+                return "1.0.3";
+            case v1_0_4:
+                return "1.0.4";
+            case v1_0_5:
+                return "1.0.5";
+            case v1_0_6:
+                return "1.0.6";
+            case v1_0_7:
+                return "1.0.9";
+            case v1_1_0:
+            default:
+                return "1.1.3";
+        }
+    }
 }

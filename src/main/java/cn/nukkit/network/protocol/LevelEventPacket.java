@@ -98,19 +98,35 @@ public class LevelEventPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.evid = this.getVarInt();
-        Vector3f v = this.getVector3f();
-        this.x = v.x;
-        this.y = v.y;
-        this.z = v.z;
-        this.data = this.getVarInt();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.evid = this.getShort();
+            this.x = this.getFloat();
+            this.y = this.getFloat();
+            this.z = this.getFloat();
+            this.data = this.getInt();
+        } else {
+            this.evid = this.getVarInt();
+            Vector3f v = this.getVector3f();
+            this.x = v.x;
+            this.y = v.y;
+            this.z = v.z;
+            this.data = this.getVarInt();
+        }
     }
 
     @Override
     public void encode() {
         this.reset();
-        this.putVarInt(this.evid);
-        this.putVector3f(this.x, this.y, this.z);
-        this.putVarInt(this.data);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putShort(this.evid);
+            this.putFloat(this.x);
+            this.putFloat(this.y);
+            this.putFloat(this.z);
+            this.putInt(this.data);
+        } else {
+            this.putVarInt(this.evid);
+            this.putVector3f(this.x, this.y, this.z);
+            this.putVarInt(this.data);
+        }
     }
 }

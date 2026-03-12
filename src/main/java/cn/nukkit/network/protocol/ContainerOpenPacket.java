@@ -14,6 +14,7 @@ public class ContainerOpenPacket extends DataPacket {
 
     public byte windowid;
     public byte type;
+    public int slots;
     public int x;
     public int y;
     public int z;
@@ -29,7 +30,19 @@ public class ContainerOpenPacket extends DataPacket {
         this.reset();
         this.putByte(this.windowid);
         this.putByte(this.type);
-        this.putBlockCoords(this.x, this.y, this.z);
-        this.putVarLong(this.entityId);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putShort(this.slots);
+            this.putInt(this.x);
+            this.putInt(this.y);
+            this.putInt(this.z);
+            this.putLong(this.entityId);
+        } else if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putVarInt(this.slots);
+            this.putBlockCoords(this.x, this.y, this.z);
+            this.putVarLong(this.entityId);
+        } else {
+            this.putBlockCoords(this.x, this.y, this.z);
+            this.putVarLong(this.entityId);
+        }
     }
 }

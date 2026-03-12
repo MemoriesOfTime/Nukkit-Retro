@@ -32,9 +32,14 @@ public class TextPacket extends DataPacket {
         switch (type) {
             case TYPE_POPUP:
             case TYPE_CHAT:
+                this.source = this.getString();
+                this.message = this.getString();
+                break;
             case TYPE_WHISPER:
             case TYPE_ANNOUNCEMENT:
-                this.source = this.getString();
+                if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+                    this.source = this.getString();
+                }
             case TYPE_RAW:
             case TYPE_TIP:
             case TYPE_SYSTEM:
@@ -43,7 +48,7 @@ public class TextPacket extends DataPacket {
 
             case TYPE_TRANSLATION:
                 this.message = this.getString();
-                int count = (int) this.getUnsignedVarInt();
+                int count = (this.protocol < ProtocolInfo.v0_16_0) ? this.getByte() : (int) this.getUnsignedVarInt();
                 this.parameters = new String[count];
                 for (int i = 0; i < count; i++) {
                     this.parameters[i] = this.getString();
@@ -54,13 +59,25 @@ public class TextPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putByte(this.type);
-        switch (this.type) {
+        byte type = this.type;
+        if (ProtocolInfo.isLegacyProtocol(this.protocol) && type == TYPE_ANNOUNCEMENT) {
+            type = TYPE_SYSTEM;
+        }
+        if ((this.protocol < ProtocolInfo.v0_16_0) && (type == TYPE_WHISPER || type == TYPE_ANNOUNCEMENT)) {
+            type = TYPE_SYSTEM;
+        }
+        this.putByte(type);
+        switch (type) {
             case TYPE_POPUP:
             case TYPE_CHAT:
+                this.putString(this.source);
+                this.putString(this.message);
+                break;
             case TYPE_WHISPER:
             case TYPE_ANNOUNCEMENT:
-                this.putString(this.source);
+                if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+                    this.putString(this.source);
+                }
             case TYPE_RAW:
             case TYPE_TIP:
             case TYPE_SYSTEM:
@@ -69,7 +86,11 @@ public class TextPacket extends DataPacket {
 
             case TYPE_TRANSLATION:
                 this.putString(this.message);
-                this.putUnsignedVarInt(this.parameters.length);
+                if ((this.protocol < ProtocolInfo.v0_16_0)) {
+                    this.putByte((byte) this.parameters.length);
+                } else {
+                    this.putUnsignedVarInt(this.parameters.length);
+                }
                 for (String parameter : this.parameters) {
                     this.putString(parameter);
                 }

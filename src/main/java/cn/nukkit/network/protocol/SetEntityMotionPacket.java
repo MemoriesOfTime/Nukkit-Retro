@@ -25,7 +25,17 @@ public class SetEntityMotionPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putVarLong(this.eid);
-        this.putVector3f(this.motionX, this.motionY, this.motionZ);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            if (this.protocol == ProtocolInfo.v0_15_0) {
+                this.putInt(1);
+            }
+            this.putLong(this.eid);
+            this.putFloat(this.motionX);
+            this.putFloat(this.motionY);
+            this.putFloat(this.motionZ);
+        } else {
+            this.putVarLong(this.eid);
+            this.putVector3f(this.motionX, this.motionY, this.motionZ);
+        }
     }
 }

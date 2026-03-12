@@ -20,13 +20,21 @@ public class ResourcePackStackPacket extends DataPacket {
         this.reset();
         this.putBoolean(this.mustAccept);
 
-        this.putUnsignedVarInt(this.behaviourPackStack.length);
+        if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putLShort(this.behaviourPackStack.length);
+        } else {
+            this.putUnsignedVarInt(this.behaviourPackStack.length);
+        }
         for (ResourcePack entry : this.behaviourPackStack) {
             this.putString(entry.getPackId());
             this.putString(entry.getPackVersion());
         }
 
-        this.putUnsignedVarInt(this.resourcePackStack.length);
+        if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+            this.putLShort(this.resourcePackStack.length);
+        } else {
+            this.putUnsignedVarInt(this.resourcePackStack.length);
+        }
         for (ResourcePack entry : this.resourcePackStack) {
             this.putString(entry.getPackId());
             this.putString(entry.getPackVersion());

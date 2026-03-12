@@ -25,7 +25,12 @@ public class ContainerSetDataPacket extends DataPacket {
     public void encode() {
         this.reset();
         this.putByte(this.windowid);
-        this.putVarInt(this.property);
-        this.putVarInt(this.value);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putShort(this.property);
+            this.putShort(this.value);
+        } else {
+            this.putVarInt(this.property);
+            this.putVarInt(this.value);
+        }
     }
 }

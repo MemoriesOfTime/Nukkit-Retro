@@ -23,8 +23,13 @@ public class SetEntityLinkPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putVarLong(this.rider);
-        this.putVarLong(this.riding);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putLong(this.rider);
+            this.putLong(this.riding);
+        } else {
+            this.putVarLong(this.rider);
+            this.putVarLong(this.riding);
+        }
         this.putByte(this.type);
     }
 

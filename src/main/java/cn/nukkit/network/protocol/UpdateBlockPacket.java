@@ -36,9 +36,20 @@ public class UpdateBlockPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putBlockCoords(x, y, z);
-        this.putUnsignedVarInt(blockId);
-        this.putUnsignedVarInt((0xb << 4) | blockData & 0xf);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            if (this.protocol == ProtocolInfo.v0_15_0) {
+                this.putInt(1);
+            }
+            this.putInt(this.x);
+            this.putInt(this.z);
+            this.putByte((byte) this.y);
+            this.putByte((byte) this.blockId);
+            this.putByte((byte) ((this.flags << 4) | this.blockData));
+        } else {
+            this.putBlockCoords(x, y, z);
+            this.putUnsignedVarInt(blockId);
+            this.putUnsignedVarInt((0xb << 4) | blockData & 0xf);
+        }
     }
 
     public static class Entry {

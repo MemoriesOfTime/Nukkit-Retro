@@ -26,7 +26,11 @@ public class SetEntityDataPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putVarLong(this.eid);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putLong(this.eid);
+        } else {
+            this.putVarLong(this.eid);
+        }
         this.put(Binary.writeMetadata(this.metadata));
     }
 }

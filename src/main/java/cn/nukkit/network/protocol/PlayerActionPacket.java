@@ -38,22 +38,40 @@ public class PlayerActionPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.entityId = this.getVarLong();
-        this.action = this.getVarInt();
-        BlockVector3 v = this.getBlockCoords();
-        this.x = v.x;
-        this.y = v.y;
-        this.z = v.z;
-        this.face = this.getVarInt();
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.entityId = this.getLong();
+            this.action = this.getInt();
+            this.x = this.getInt();
+            this.y = this.getInt();
+            this.z = this.getInt();
+            this.face = this.getInt();
+        } else {
+            this.entityId = this.getVarLong();
+            this.action = this.getVarInt();
+            BlockVector3 v = this.getBlockCoords();
+            this.x = v.x;
+            this.y = v.y;
+            this.z = v.z;
+            this.face = this.getVarInt();
+        }
     }
 
     @Override
     public void encode() {
         this.reset();
-        this.putVarLong(this.entityId);
-        this.putVarInt(this.action);
-        this.putBlockCoords(this.x, this.y, this.z);
-        this.putVarInt(this.face);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putLong(this.entityId);
+            this.putInt(this.action);
+            this.putInt(this.x);
+            this.putInt(this.y);
+            this.putInt(this.z);
+            this.putInt(this.face);
+        } else {
+            this.putVarLong(this.entityId);
+            this.putVarInt(this.action);
+            this.putBlockCoords(this.x, this.y, this.z);
+            this.putVarInt(this.face);
+        }
     }
 
     @Override

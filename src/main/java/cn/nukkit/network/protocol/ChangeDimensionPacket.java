@@ -24,9 +24,17 @@ public class ChangeDimensionPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putVarInt(this.dimension);
-        this.putVector3f(this.x, this.y, this.z);
-        this.putBoolean(this.unknown);
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.putByte((byte) this.dimension);
+            this.putFloat(this.x);
+            this.putFloat(this.y);
+            this.putFloat(this.z);
+            this.putByte((byte) 0);
+        } else {
+            this.putVarInt(this.dimension);
+            this.putVector3f(this.x, this.y, this.z);
+            this.putBoolean(this.unknown);
+        }
     }
 
     @Override

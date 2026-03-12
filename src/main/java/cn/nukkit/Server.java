@@ -542,15 +542,10 @@ public class Server {
     }
 
     public static void broadcastPacket(Player[] players, DataPacket packet) {
-        packet.encode();
-        packet.isEncoded = true;
-
         for (Player player : players) {
-            player.dataPacket(packet);
-        }
-
-        if (packet.encapsulatedPacket != null) {
-            packet.encapsulatedPacket = null;
+            if (player != null && player.isConnected()) {
+                player.dataPacket(packet);
+            }
         }
     }
 
@@ -564,36 +559,51 @@ public class Server {
         }
 
         Timings.playerNetworkSendTimer.startTiming();
+        Map<Integer, List<String>> targetsByProtocol = new HashMap<>();
+        for (Player p : players) {
+            if (p.isConnected()) {
+                String target = this.identifier.get(p.rawHashCode());
+                if (target != null) {
+                    targetsByProtocol.computeIfAbsent(p.protocol, key -> new ArrayList<>()).add(target);
+                }
+            }
+        }
+
+        for (Map.Entry<Integer, List<String>> entry : targetsByProtocol.entrySet()) {
+            byte[] data = this.encodeBatchPackets(entry.getKey(), packets);
+
+            if (!forceSync && this.networkCompressionAsync) {
+                this.getScheduler().scheduleAsyncTask(new CompressBatchedTask(data, entry.getValue(), this.networkCompressionLevel));
+            } else {
+                try {
+                    this.broadcastPacketsCallback(Zlib.deflate(data, this.networkCompressionLevel), entry.getValue());
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+        Timings.playerNetworkSendTimer.stopTiming();
+    }
+
+    private byte[] encodeBatchPackets(int protocol, DataPacket[] packets) {
         byte[][] payload = new byte[packets.length * 2][];
         for (int i = 0; i < packets.length; i++) {
-            DataPacket p = packets[i];
-            if (!p.isEncoded) {
-                p.encode();
+            DataPacket p = packets[i].clone();
+            if (p == null) {
+                p = packets[i];
             }
+            p.protocol = protocol;
+            p.isEncoded = false;
+            p.setBuffer(null);
+            p.setOffset(0);
+            p.encode();
+            p.isEncoded = true;
+
             byte[] buf = p.getBuffer();
             payload[i * 2] = Binary.writeUnsignedVarInt(buf.length);
             payload[i * 2 + 1] = buf;
         }
-        byte[] data;
-        data = Binary.appendBytes(payload);
-
-        List<String> targets = new ArrayList<>();
-        for (Player p : players) {
-            if (p.isConnected()) {
-                targets.add(this.identifier.get(p.rawHashCode()));
-            }
-        }
-
-        if (!forceSync && this.networkCompressionAsync) {
-            this.getScheduler().scheduleAsyncTask(new CompressBatchedTask(data, targets, this.networkCompressionLevel));
-        } else {
-            try {
-                this.broadcastPacketsCallback(Zlib.deflate(data, this.networkCompressionLevel), targets);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
-        Timings.playerNetworkSendTimer.stopTiming();
+        return Binary.appendBytes(payload);
     }
 
     public void broadcastPacketsCallback(byte[] data, List<String> identifiers) {
