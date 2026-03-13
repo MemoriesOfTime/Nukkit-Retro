@@ -101,6 +101,12 @@ spawn-limits:
  water-animals: 5
  ambient: 15
  
+watchdog:
+ #Enable the Watchdog thread to monitor the main thread. If it does not respond within the timeout, the server will be force-stopped
+ thread-watchdog: true
+ #Watchdog timeout in milliseconds (default 60000 = 60 seconds)
+ thread-watchdog-tick: 60000
+
 player:
  #만약 true로 설정하면, 플레이어 데이터가 플레이어들/플레이어 이름.dat으로 저장됩니다
  #만약 false로 설정하면, Nukkit은 플레이어 데이터를 "dat" 파일들로 저장하지 않으므로 플러그인에서 무언가를 할 수 있습니다.

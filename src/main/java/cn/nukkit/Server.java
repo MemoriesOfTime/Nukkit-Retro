@@ -196,6 +196,8 @@ public class Server {
 
     private Thread currentThread;
 
+    private Watchdog watchdog;
+
     Server(MainLogger logger, final String filePath, String dataPath, String pluginPath) {
         Preconditions.checkState(instance == null, "Already initialized!");
         currentThread = Thread.currentThread(); // Saves the current thread instance as a reference, used in Server#isPrimaryThread()
@@ -739,6 +741,7 @@ public class Server {
             this.getLogger().debug("Unloading all levels");
             for (Level level : new ArrayList<>(this.getLevels().values())) {
                 this.unloadLevel(level, true);
+                this.nextTick = System.currentTimeMillis();
             }
 
             this.getLogger().debug("Removing event handlers");
@@ -759,6 +762,11 @@ public class Server {
 
             this.getLogger().debug("Disabling timings");
             Timings.stopServer();
+
+            if (this.watchdog != null) {
+                this.watchdog.kill();
+            }
+
             //todo other things
         } catch (Exception e) {
             this.logger.logException(e); //todo remove this?
@@ -783,6 +791,12 @@ public class Server {
         this.logger.info(this.getLanguage().translateString("nukkit.server.defaultGameMode", getGamemodeString(this.getGamemode())));
 
         this.logger.info(this.getLanguage().translateString("nukkit.server.startFinished", String.valueOf((double) (System.currentTimeMillis() - Nukkit.START_TIME) / 1000)));
+
+        if ((boolean) this.getConfig("watchdog.thread-watchdog", true)) {
+            int timeout = (int) this.getConfig("watchdog.thread-watchdog-tick", 60000);
+            this.watchdog = new Watchdog(this, timeout);
+            this.watchdog.start();
+        }
 
         this.tickProcessor();
         this.forceShutdown();
@@ -1907,6 +1921,14 @@ public class Server {
      */
     public boolean isPrimaryThread() {
         return (Thread.currentThread() == currentThread);
+    }
+
+    public long getNextTick() {
+        return nextTick;
+    }
+
+    public Thread getPrimaryThread() {
+        return currentThread;
     }
 
     private void registerEntities() {

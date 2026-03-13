@@ -104,6 +104,12 @@ spawn-limits:
  water-animals: 5
  ambient: 15
  
+watchdog:
+ #启用看门狗线程监控主线程。如果主线程在超时时间内无响应，服务器将被强制关闭
+ thread-watchdog: true
+ #看门狗超时时间，单位毫秒（默认 60000 = 60秒）
+ thread-watchdog-tick: 60000
+
 player:
  #决定服务器是否以players/xxx.dat的形式保存玩家数据。默认true为保存。
  #如果设置为false，nukkit将不会保存玩家数据。一些与玩家数据有关的插件也许会用到这个设置。

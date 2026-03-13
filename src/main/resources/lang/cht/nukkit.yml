@@ -112,6 +112,12 @@ spawn-limits:
  water-animals: 5
  ambient: 15
 
+watchdog:
+ #Enable the Watchdog thread to monitor the main thread. If it does not respond within the timeout, the server will be force-stopped
+ thread-watchdog: true
+ #Watchdog timeout in milliseconds (default 60000 = 60 seconds)
+ thread-watchdog-tick: 60000
+
 player:
  #設置為 ture，玩家資料將被儲存為 player/<玩家代號>.dat
  #設置為 false，nukkit 將不會儲存玩家資料為 "dat" 檔案，以便插件可以在其上執行某些操作。

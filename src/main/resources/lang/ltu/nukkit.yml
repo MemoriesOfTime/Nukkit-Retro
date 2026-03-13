@@ -101,6 +101,12 @@ spawn-limits:
  water-animals: 5
  ambient: 15
  
+watchdog:
+ #Enable the Watchdog thread to monitor the main thread. If it does not respond within the timeout, the server will be force-stopped
+ thread-watchdog: true
+ #Watchdog timeout in milliseconds (default 60000 = 60 seconds)
+ thread-watchdog-tick: 60000
+
 player:
  #Jeigu įvestis "true", tai žaidėjo informacija bus išsaugota faile players/zaidejo-vardas.dat
  #Jeigu įvestis "false", nukkit neišsaugos žaidėjo informacijos į "dat" failus, kad įskiepiai galėtų kažką padaryti su jais
