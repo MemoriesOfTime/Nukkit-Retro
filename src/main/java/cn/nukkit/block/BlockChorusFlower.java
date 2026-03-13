@@ -1,41 +1,47 @@
 package cn.nukkit.block;
 
+import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemTool;
 import cn.nukkit.network.protocol.ProtocolInfo;
 
-public class BlockStairsPurpur extends BlockStairs {
+public class BlockChorusFlower extends BlockTransparent {
 
-    public BlockStairsPurpur() {
+    public BlockChorusFlower() {
         this(0);
     }
 
-    public BlockStairsPurpur(int meta) {
+    public BlockChorusFlower(int meta) {
         super(meta);
     }
 
     @Override
     public int getId() {
-        return PURPUR_STAIRS;
-    }
-
-    @Override
-    public double getHardness() {
-        return 1.5;
-    }
-
-    @Override
-    public double getResistance() {
-        return 30;
-    }
-
-    @Override
-    public int getToolType() {
-        return ItemTool.TYPE_PICKAXE;
+        return CHORUS_FLOWER;
     }
 
     @Override
     public String getName() {
-        return "Purpur Stairs";
+        return "Chorus Flower";
+    }
+
+    @Override
+    public double getHardness() {
+        return 0.4;
+    }
+
+    @Override
+    public double getResistance() {
+        return 0.4;
+    }
+
+    @Override
+    public int getToolType() {
+        return ItemTool.TYPE_AXE;
+    }
+
+    @Override
+    public Item toItem() {
+        return Item.get(this.getId(), 0, 1);
     }
 
     @Override

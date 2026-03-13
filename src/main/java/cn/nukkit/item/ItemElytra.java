@@ -1,5 +1,7 @@
 package cn.nukkit.item;
 
+import cn.nukkit.network.protocol.ProtocolInfo;
+
 /**
  * author: MagicDroidX
  * Nukkit Project
@@ -31,6 +33,11 @@ public class ItemElytra extends ItemTool {
     @Override
     public boolean isChestplate() {
         return true;
+    }
+
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v1_0_0;
     }
 
 }

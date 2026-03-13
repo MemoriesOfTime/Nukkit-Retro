@@ -2,6 +2,7 @@ package cn.nukkit.block;
 
 import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemTool;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 public class BlockBricksEndStone extends BlockSolid {
 
@@ -47,5 +48,10 @@ public class BlockBricksEndStone extends BlockSolid {
         } else {
             return new Item[0];
         }
+    }
+
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v1_0_0;
     }
 }

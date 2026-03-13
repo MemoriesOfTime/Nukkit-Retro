@@ -5,6 +5,7 @@ import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemTool;
 import cn.nukkit.math.AxisAlignedBB;
 import cn.nukkit.math.BlockFace;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 /**
  * http://minecraft.gamepedia.com/End_Rod
@@ -74,6 +75,11 @@ public class BlockEndRod extends BlockTransparent {
         this.getLevel().setBlock(block, this, true, true);
 
         return true;
+    }
+
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v1_0_0;
     }
 
 }

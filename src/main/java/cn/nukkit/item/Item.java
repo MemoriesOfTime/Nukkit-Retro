@@ -15,13 +15,20 @@ import cn.nukkit.nbt.tag.CompoundTag;
 import cn.nukkit.nbt.tag.ListTag;
 import cn.nukkit.nbt.tag.StringTag;
 import cn.nukkit.nbt.tag.Tag;
+import cn.nukkit.network.protocol.ProtocolInfo;
 import cn.nukkit.utils.Binary;
+import cn.nukkit.utils.Config;
+import cn.nukkit.utils.MainLogger;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -784,17 +791,17 @@ public class Item implements Cloneable {
             list[JUNGLE_DOOR] = ItemDoorJungle.class; //429
             list[ACACIA_DOOR] = ItemDoorAcacia.class; //430
             list[DARK_OAK_DOOR] = ItemDoorDarkOak.class; //431
-            //TODO: list[CHORUS_FRUIT] = ItemChorusFruit.class; //432
-            //TODO: list[POPPED_CHORUS_FRUIT] = ItemChorusFruitPopped.class; //433
+            list[CHORUS_FRUIT] = ItemChorusFruit.class; //432
+            list[POPPED_CHORUS_FRUIT] = ItemChorusFruitPopped.class; //433
 
-            //TODO: list[DRAGON_BREATH] = ItemDragonBreath.class; //437
+            list[DRAGON_BREATH] = ItemDragonBreath.class; //437
             list[SPLASH_POTION] = ItemPotionSplash.class; //438
 
-            //TODO: list[LINGERING_POTION] = ItemPotionLingering.class; //441
+            list[LINGERING_POTION] = ItemPotionLingering.class; //441
 
             list[ELYTRA] = ItemElytra.class; //444
 
-            //TODO: list[SHULKER_SHELL] = ItemShulkerShell.class; //445
+            list[SHULKER_SHELL] = ItemShulkerShell.class; //445
 
             list[BEETROOT] = ItemBeetroot.class; //457
             list[BEETROOT_SEEDS] = ItemSeedsBeetroot.class; //458
@@ -817,6 +824,7 @@ public class Item implements Cloneable {
     }
 
     private static final ArrayList<Item> creative = new ArrayList<>();
+    private static final HashMap<Integer, ArrayList<Item>> creativeByProtocol = new HashMap<>();
 
     private static void initCreativeItems() {
         clearCreativeItems();
@@ -1146,7 +1154,7 @@ public class Item implements Cloneable {
         addCreativeItem(Item.get(Item.IRON_HORSE_ARMOR, 0));
         addCreativeItem(Item.get(Item.GOLD_HORSE_ARMOR, 0));
         addCreativeItem(Item.get(Item.DIAMOND_HORSE_ARMOR, 0));
-        
+
         addCreativeItem(Item.get(Item.SPAWN_EGG, 10)); //Chicken
         addCreativeItem(Item.get(Item.SPAWN_EGG, 11)); //Cow
         addCreativeItem(Item.get(Item.SPAWN_EGG, 12)); //Pig
@@ -1154,7 +1162,7 @@ public class Item implements Cloneable {
         addCreativeItem(Item.get(Item.SPAWN_EGG, 15)); //Villager
         addCreativeItem(Item.get(Item.SPAWN_EGG, 16)); //Mooshroom
         addCreativeItem(Item.get(Item.SPAWN_EGG, 17)); //Squid
-        addCreativeItem(Item.get(Item.SPAWN_EGG, 19)); //Bat 
+        addCreativeItem(Item.get(Item.SPAWN_EGG, 19)); //Bat
 		//addCreativeItem(Item.get(Item.SPAWN_EGG, 20)); //Iron Golem
         //addCreativeItem(Item.get(Item.SPAWN_EGG, 21)); //Snow Golem
         addCreativeItem(Item.get(Item.SPAWN_EGG, 22)); //Ocelot
@@ -1183,7 +1191,7 @@ public class Item implements Cloneable {
         addCreativeItem(Item.get(Item.SPAWN_EGG, 49)); //Guardian
         addCreativeItem(Item.get(Item.SPAWN_EGG, 50)); //ElderGuardian
         addCreativeItem(Item.get(Item.SPAWN_EGG, 54)); //Shulker
-        
+
         addCreativeItem(Item.get(Item.FIRE_CHARGE, 0));
         addCreativeItem(Item.get(Item.WOODEN_SWORD));
         addCreativeItem(Item.get(Item.WOODEN_HOE));
@@ -1458,14 +1466,109 @@ public class Item implements Cloneable {
         addCreativeItem(Item.get(Item.LINGERING_POTION, ItemPotion.WEAKNESS));
         addCreativeItem(Item.get(Item.LINGERING_POTION, ItemPotion.WEAKNESS_LONG));
         addCreativeItem(Item.get(Item.LINGERING_POTION, ItemPotion.DECAY));
+
+        registerProtocolCreativeItems();
+    }
+
+    private static void registerProtocolCreativeItems() {
+        HashSet<Integer> loadedProtocols = new HashSet<>();
+
+        for (int supportedProtocol : ProtocolInfo.SUPPORTED_PROTOCOLS) {
+            int poolProtocol = ProtocolInfo.getPacketPoolProtocol(supportedProtocol);
+            if (loadedProtocols.add(poolProtocol)) {
+                registerProtocolCreativeItems(poolProtocol, "creativeitems" + poolProtocol + ".json");
+            }
+        }
+    }
+
+    private static void registerProtocolCreativeItems(int protocolId, String resourcePath) {
+        try (InputStream inputStream = Item.class.getClassLoader().getResourceAsStream(resourcePath)) {
+            if (inputStream == null) {
+                return;
+            }
+
+            Config config = new Config(Config.JSON);
+            if (!config.load(inputStream)) {
+                throw new IllegalStateException("Unable to parse creative items resource: " + resourcePath);
+            }
+
+            ArrayList<Item> items = new ArrayList<>();
+            for (Map itemData : config.getMapList("items")) {
+                Number id = asCreativeItemNumber(itemData.get("id"));
+                if (id == null) {
+                    throw new IllegalStateException("Creative item entry missing id: " + itemData);
+                }
+
+                Number damage = asCreativeItemNumber(itemData.get("damage"));
+                Number count = asCreativeItemNumber(itemData.get("count"));
+                Item item = Item.get(id.intValue(), damage != null ? damage.intValue() : 0, count != null ? count.intValue() : 1);
+                if (item.isSupportedOn(protocolId)) {
+                    items.add(item);
+                }
+            }
+
+            Item.creativeByProtocol.put(protocolId, items);
+        } catch (Exception e) {
+            throw new AssertionError("Error while loading creative items for protocol " + protocolId, e);
+        }
+    }
+
+    private static Number asCreativeItemNumber(Object value) {
+        if (value instanceof Number) {
+            return (Number) value;
+        }
+
+        if (value instanceof String) {
+            try {
+                return Integer.parseInt((String) value);
+            } catch (NumberFormatException e) {
+                MainLogger.getLogger().logException(e);
+            }
+        }
+
+        return null;
+    }
+
+    private static List<Item> resolveCreativeItems(int protocolId) {
+        int poolProtocol = ProtocolInfo.getPacketPoolProtocol(protocolId);
+        ArrayList<Item> protocolCreativeItems = Item.creativeByProtocol.get(poolProtocol);
+        if (protocolCreativeItems != null) {
+            return protocolCreativeItems;
+        }
+
+        if (poolProtocol == ProtocolInfo.CURRENT_PROTOCOL) {
+            return Item.creative;
+        }
+
+        ArrayList<Item> filteredCreativeItems = new ArrayList<>();
+        for (Item creativeItem : Item.creative) {
+            if (creativeItem.isSupportedOn(poolProtocol)) {
+                filteredCreativeItems.add(creativeItem);
+            }
+        }
+        return filteredCreativeItems;
+    }
+
+    private static int getCreativeItemIndex(List<Item> creativeItems, Item item) {
+        for (int i = 0; i < creativeItems.size(); i++) {
+            if (item.equals(creativeItems.get(i), !item.isTool())) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public static void clearCreativeItems() {
         Item.creative.clear();
+        Item.creativeByProtocol.clear();
     }
 
     public static ArrayList<Item> getCreativeItems() {
         return new ArrayList<>(Item.creative);
+    }
+
+    public static ArrayList<Item> getCreativeItems(int protocolId) {
+        return new ArrayList<>(resolveCreativeItems(protocolId));
     }
 
     public static void addCreativeItem(Item item) {
@@ -1480,12 +1583,11 @@ public class Item implements Cloneable {
     }
 
     public static boolean isCreativeItem(Item item) {
-        for (Item aCreative : Item.creative) {
-            if (item.equals(aCreative, !item.isTool())) {
-                return true;
-            }
-        }
-        return false;
+        return getCreativeItemIndex(Item.creative, item) != -1;
+    }
+
+    public static boolean isCreativeItem(int protocolId, Item item) {
+        return getCreativeItemIndex(protocolId, item) != -1;
     }
 
     public static Item getCreativeItem(int index) {
@@ -1493,12 +1595,11 @@ public class Item implements Cloneable {
     }
 
     public static int getCreativeItemIndex(Item item) {
-        for (int i = 0; i < Item.creative.size(); i++) {
-            if (item.equals(Item.creative.get(i), !item.isTool())) {
-                return i;
-            }
-        }
-        return -1;
+        return getCreativeItemIndex(Item.creative, item);
+    }
+
+    public static int getCreativeItemIndex(int protocolId, Item item) {
+        return getCreativeItemIndex(resolveCreativeItems(protocolId), item);
     }
 
     public static Item get(int id) {
@@ -2023,6 +2124,10 @@ public class Item implements Cloneable {
 
     public int getToughness() {
         return 0;
+    }
+
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v0_14_0;
     }
 
     public boolean isUnbreakable() {

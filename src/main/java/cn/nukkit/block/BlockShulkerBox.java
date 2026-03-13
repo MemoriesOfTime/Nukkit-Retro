@@ -1,40 +1,37 @@
 package cn.nukkit.block;
 
-import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemTool;
 import cn.nukkit.network.protocol.ProtocolInfo;
+import cn.nukkit.utils.BlockColor;
 
-/**
- * Created by CreeperFace on 2.6.2017.
- */
-public class BlockConcrete extends BlockSolid {
+public class BlockShulkerBox extends BlockSolid {
 
-    public BlockConcrete() {
+    public BlockShulkerBox() {
         this(0);
     }
 
-    public BlockConcrete(int meta) {
+    public BlockShulkerBox(int meta) {
         super(meta);
     }
 
     @Override
     public int getId() {
-        return CONCRETE;
-    }
-
-    @Override
-    public double getResistance() {
-        return 9;
-    }
-
-    @Override
-    public double getHardness() {
-        return 1.8;
+        return SHULKER_BOX;
     }
 
     @Override
     public String getName() {
-        return "Concrete";
+        return "Shulker Box";
+    }
+
+    @Override
+    public double getHardness() {
+        return 2.5;
+    }
+
+    @Override
+    public double getResistance() {
+        return 30;
     }
 
     @Override
@@ -43,8 +40,13 @@ public class BlockConcrete extends BlockSolid {
     }
 
     @Override
-    public Item[] getDrops(Item item) {
-        return item.getTier() >= ItemTool.TIER_WOODEN ? new Item[]{toItem()} : new Item[0];
+    public boolean canHarvestWithHand() {
+        return false;
+    }
+
+    @Override
+    public BlockColor getColor() {
+        return BlockColor.PURPLE_BLOCK_COLOR;
     }
 
     @Override

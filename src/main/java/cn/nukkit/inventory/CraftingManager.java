@@ -6,12 +6,14 @@ import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemBlock;
 import cn.nukkit.item.ItemPotion;
 import cn.nukkit.network.protocol.CraftingDataPacket;
+import cn.nukkit.network.protocol.ProtocolInfo;
 import cn.nukkit.utils.Config;
 import cn.nukkit.utils.MainLogger;
 import cn.nukkit.utils.Utils;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * author: MagicDroidX
@@ -29,6 +31,10 @@ public class CraftingManager {
 
     private static int RECIPE_COUNT = 0;
 
+    private static CraftingDataPacket packetTemplate = null;
+    private static final Map<Integer, CraftingDataPacket> packetCache = new ConcurrentHashMap<>();
+
+    @Deprecated
     public static CraftingDataPacket packet = null;
 
     public CraftingManager() {
@@ -146,9 +152,22 @@ public class CraftingManager {
             pk.addFurnaceRecipe(recipe);
         }
 
-        pk.tryEncode();
+        packetTemplate = pk;
+        packetCache.clear();
 
-        packet = pk;
+        CraftingDataPacket defaultPk = (CraftingDataPacket) pk.clone();
+        defaultPk.protocol = ProtocolInfo.CURRENT_PROTOCOL;
+        defaultPk.tryEncode();
+        packet = defaultPk;
+    }
+
+    public CraftingDataPacket getPacket(int protocol) {
+        return packetCache.computeIfAbsent(protocol, p -> {
+            CraftingDataPacket pk = (CraftingDataPacket) packetTemplate.clone();
+            pk.protocol = p;
+            pk.tryEncode();
+            return pk;
+        });
     }
 
     public final Comparator<Item> comparator = (i1, i2) -> {

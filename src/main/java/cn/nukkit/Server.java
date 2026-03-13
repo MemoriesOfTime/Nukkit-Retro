@@ -903,7 +903,7 @@ public class Server {
     }
 
     public void sendRecipeList(Player player) {
-        player.dataPacket(CraftingManager.packet);
+        player.dataPacket(this.getCraftingManager().getPacket(player.protocol));
     }
 
     private void checkTickUpdates(int currentTick, long tickTime) {

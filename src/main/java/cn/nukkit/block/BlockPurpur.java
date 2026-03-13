@@ -5,6 +5,7 @@ import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemBlock;
 import cn.nukkit.item.ItemTool;
 import cn.nukkit.math.BlockFace;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 public class BlockPurpur extends BlockSolid {
 
@@ -84,5 +85,10 @@ public class BlockPurpur extends BlockSolid {
     @Override
     public Item toItem() {
         return new ItemBlock(new BlockPurpur(), this.meta & 0x03, 1);
+    }
+
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v1_0_0;
     }
 }

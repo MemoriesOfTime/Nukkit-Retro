@@ -1,41 +1,48 @@
 package cn.nukkit.block;
 
+import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemTool;
 import cn.nukkit.network.protocol.ProtocolInfo;
+import cn.nukkit.utils.BlockColor;
 
-public class BlockStairsPurpur extends BlockStairs {
+public class BlockChorusPlant extends BlockTransparent {
 
-    public BlockStairsPurpur() {
+    public BlockChorusPlant() {
         this(0);
     }
 
-    public BlockStairsPurpur(int meta) {
+    public BlockChorusPlant(int meta) {
         super(meta);
     }
 
     @Override
     public int getId() {
-        return PURPUR_STAIRS;
-    }
-
-    @Override
-    public double getHardness() {
-        return 1.5;
-    }
-
-    @Override
-    public double getResistance() {
-        return 30;
-    }
-
-    @Override
-    public int getToolType() {
-        return ItemTool.TYPE_PICKAXE;
+        return CHORUS_PLANT;
     }
 
     @Override
     public String getName() {
-        return "Purpur Stairs";
+        return "Chorus Plant";
+    }
+
+    @Override
+    public double getHardness() {
+        return 0.4;
+    }
+
+    @Override
+    public double getResistance() {
+        return 0.4;
+    }
+
+    @Override
+    public int getToolType() {
+        return ItemTool.TYPE_AXE;
+    }
+
+    @Override
+    public BlockColor getColor() {
+        return BlockColor.PURPLE_BLOCK_COLOR;
     }
 
     @Override

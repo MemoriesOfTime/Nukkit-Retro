@@ -40,4 +40,9 @@ public class ItemBlock extends Item {
         return this.block;
     }
 
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return this.block != null ? this.block.isSupportedOn(protocolId) : super.isSupportedOn(protocolId);
+    }
+
 }

@@ -14,6 +14,7 @@ import cn.nukkit.math.BlockFace;
 import cn.nukkit.math.Vector3;
 import cn.nukkit.metadata.MetadataValue;
 import cn.nukkit.metadata.Metadatable;
+import cn.nukkit.network.protocol.ProtocolInfo;
 import cn.nukkit.plugin.Plugin;
 import cn.nukkit.potion.Effect;
 import cn.nukkit.utils.BlockColor;
@@ -548,7 +549,7 @@ public abstract class Block extends Position implements Metadatable, Cloneable {
             list[DARK_OAK_DOOR_BLOCK] = BlockDoorDarkOak.class; //197
             list[GRASS_PATH] = BlockGrassPath.class; //198
             list[ITEM_FRAME_BLOCK] = BlockItemFrame.class; //199
-            //TODO: list[CHORUS_FLOWER] = BlockChorusFlower.class; //200
+            list[CHORUS_FLOWER] = BlockChorusFlower.class; //200
             list[PURPUR_BLOCK] = BlockPurpur.class; //201
 
             list[PURPUR_STAIRS] = BlockStairsPurpur.class; //203
@@ -558,7 +559,7 @@ public abstract class Block extends Position implements Metadatable, Cloneable {
             list[END_ROD] = BlockEndRod.class; //208
             list[END_GATEWAY] = BlockEndGateway.class; //209
 
-            //TODO: list[SHULKER_BOX] = BlockShulkerBox.class; //218
+            list[SHULKER_BOX] = BlockShulkerBox.class; //218
             list[PURPLE_GLAZED_TERRACOTTA] = BlockTerracottaGlazedPurple.class; //219
             list[WHITE_GLAZED_TERRACOTTA] = BlockTerracottaGlazedWhite.class; //220
             list[ORANGE_GLAZED_TERRACOTTA] = BlockTerracottaGlazedOrange.class; //221
@@ -579,7 +580,7 @@ public abstract class Block extends Position implements Metadatable, Cloneable {
             list[CONCRETE] = BlockConcrete.class; //236
             list[CONCRETE_POWDER] = BlockConcretePowder.class; //237
 
-            //TODO: list[CHORUS_PLANT] = BlockChorusPlant.class; //240
+            list[CHORUS_PLANT] = BlockChorusPlant.class; //240
             list[PODZOL] = BlockPodzol.class; //243
             list[BEETROOT_BLOCK] = BlockBeetroot.class; //244
             list[GLOWING_OBSIDIAN] = BlockObsidianGlowing.class; //246
@@ -1197,6 +1198,10 @@ public abstract class Block extends Position implements Metadatable, Cloneable {
 
     public static boolean equals(Block b1, Block b2, boolean checkDamage) {
         return b1 != null && b2 != null && b1.getId() == b2.getId() && (!checkDamage || b1.getDamage() == b2.getDamage());
+    }
+
+    public boolean isSupportedOn(int protocolId) {
+        return true;
     }
 
     public Item toItem() {
