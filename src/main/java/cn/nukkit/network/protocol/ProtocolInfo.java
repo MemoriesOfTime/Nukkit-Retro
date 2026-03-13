@@ -3,11 +3,7 @@ package cn.nukkit.network.protocol;
 import org.intellij.lang.annotations.MagicConstant;
 import org.jetbrains.annotations.ApiStatus;
 
-import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.*;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -246,7 +242,7 @@ public interface ProtocolInfo {
     }
 
     @SupportedProtocol
-    static int getPacketPoolProtocol(@SupportedProtocol int protocol) {
+    static int getPacketPoolProtocol(int protocol) {
         switch (protocol) {
             case v0_14_0:
             case v0_14_1:

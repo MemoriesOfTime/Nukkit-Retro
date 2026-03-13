@@ -602,7 +602,7 @@ public class Server {
             p.tryEncode();
 
             byte[] buf = p.getBuffer();
-            payload[i * 2] = ProtocolInfo.getPacketPoolProtocol(protocol) == ProtocolInfo.v0_14_2 ? Binary.writeInt(buf.length) : Binary.writeUnsignedVarInt(buf.length);
+            payload[i * 2] = ProtocolInfo.isBefore0160(protocol) ? Binary.writeInt(buf.length) : Binary.writeUnsignedVarInt(buf.length);
             payload[i * 2 + 1] = buf;
         }
         return Binary.appendBytes(payload);

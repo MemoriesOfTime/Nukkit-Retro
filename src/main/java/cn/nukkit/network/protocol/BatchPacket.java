@@ -16,7 +16,7 @@ public class BatchPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if (ProtocolInfo.getPacketPoolProtocol(this.protocol) == ProtocolInfo.v0_14_2) {
+        if (this.protocol != Integer.MAX_VALUE && ProtocolInfo.getPacketPoolProtocol(this.protocol) == ProtocolInfo.v0_14_2) {
             this.payload = this.get(this.getInt());
         } else {
             this.payload = this.get();
@@ -25,7 +25,7 @@ public class BatchPacket extends DataPacket {
 
     @Override
     public void encode() {
-        if (ProtocolInfo.getPacketPoolProtocol(this.protocol) == ProtocolInfo.v0_14_2) {
+        if (this.protocol != Integer.MAX_VALUE && ProtocolInfo.getPacketPoolProtocol(this.protocol) == ProtocolInfo.v0_14_2) {
             this.reset();
             this.putInt(this.payload.length);
             this.put(this.payload);

@@ -1,0 +1,119 @@
+package cn.nukkit.nbt.stream;
+
+
+/*
+ * fastutil: Fast & compact type-specific collections for Java
+ *
+ * Copyright (C) 2003-2011 Sebastiano Vigna
+ *
+ *  This library is free software; you can redistribute it and/or modify it
+ *  under the terms of the GNU Lesser General Public License as published by the Free
+ *  Software Foundation; either version 2.1 of the License, or (at your option)
+ *  any later version.
+ *
+ *  This library is distributed in the hope that it will be useful, but
+ *  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ *  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
+ *  for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
+ */
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.Arrays;
+
+/**
+ * Simple, fast byte-array output stream that exposes the backing array.
+ *
+ * <p>{@link java.io.ByteArrayOutputStream} is nice, but to get its content you
+ * must generate each time a new object. This doesn't happen here.
+ *
+ * <p>This class will automatically enlarge the backing array, doubling its
+ * size whenever new space is needed. The {@link #reset()} method will
+ * mark the content as empty, but will not decrease the capacity.
+ *
+ * @author Sebastiano Vigna
+ */
+public class FastByteArrayOutputStream extends OutputStream {
+
+    public static final long ONEOVERPHI = 106039;
+
+    public final static int DEFAULT_INITIAL_CAPACITY = 16;
+
+    public byte[] array;
+
+    public int length;
+
+    private int position;
+
+    public FastByteArrayOutputStream() {
+        this(DEFAULT_INITIAL_CAPACITY);
+    }
+
+    public FastByteArrayOutputStream(final int initialCapacity) {
+        array = new byte[initialCapacity];
+    }
+
+    public FastByteArrayOutputStream(final byte[] a) {
+        array = a;
+    }
+
+    public static byte[] grow(final byte[] array, final int length) {
+        if (length > array.length) {
+            final byte[] t = new byte[(int) Math.min(Math.max((ONEOVERPHI * array.length) >>> 16, length), Integer.MAX_VALUE)];
+            System.arraycopy(array, 0, t, 0, array.length);
+            return t;
+        }
+        return array;
+    }
+
+    public static byte[] grow(final byte[] array, final int length, final int preserve) {
+        if (length > array.length) {
+            final byte[] t = new byte[(int) Math.min(Math.max((ONEOVERPHI * array.length) >>> 16, length), Integer.MAX_VALUE)];
+            System.arraycopy(array, 0, t, 0, preserve);
+            return t;
+        }
+        return array;
+    }
+
+    public FastByteArrayOutputStream reset() {
+        length = 0;
+        position = 0;
+        return this;
+    }
+
+    @Override
+    public void write(final int b) {
+        if (position >= array.length) array = grow(array, position + 1, length);
+        array[position++] = (byte) b;
+        if (length < position) length = position;
+    }
+
+    @Override
+    public void write(final byte[] b, final int off, final int len) throws IOException {
+        if (position + len > array.length) array = grow(array, position + len, position);
+        System.arraycopy(b, off, array, position, len);
+        if (position + len > length) length = position += len;
+    }
+
+    public void position(long newPosition) {
+        if (newPosition > Integer.MAX_VALUE) throw new IllegalArgumentException("Position too large: " + newPosition);
+        position = (int) newPosition;
+    }
+
+    public long position() {
+        return position;
+    }
+
+    public long length() throws IOException {
+        return length;
+    }
+
+    public byte[] toByteArray() {
+        return Arrays.copyOfRange(array, 0, position);
+    }
+}

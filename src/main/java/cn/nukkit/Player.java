@@ -131,7 +131,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     protected boolean connected = true;
     protected final String ip;
     protected boolean removeFormat = true;
-    public int protocol = ProtocolInfo.CURRENT_PROTOCOL;
+    public int protocol = Integer.MAX_VALUE;
 
     protected final int port;
     protected String username;
@@ -685,6 +685,32 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         this.sendChunk(x, z, payload, FullChunkDataPacket.ORDER_COLUMNS);
     }
 
+    public static BatchPacket getChunkCacheFromData(int chunkX, int chunkZ, byte[] payload, byte ordering, int protocol) {
+        FullChunkDataPacket pk = new FullChunkDataPacket();
+        pk.protocol = protocol;
+        pk.chunkX = chunkX;
+        pk.chunkZ = chunkZ;
+        pk.order = ordering;
+        pk.data = payload;
+        pk.tryEncode();
+
+        BatchPacket batch = new BatchPacket();
+        batch.protocol = protocol;
+        byte[][] batchPayload = new byte[2][];
+        byte[] buf = pk.getBuffer();
+        batchPayload[0] = ProtocolInfo.isBefore0160(protocol) ? Binary.writeInt(buf.length) : Binary.writeUnsignedVarInt(buf.length);
+        batchPayload[1] = buf;
+        byte[] data = Binary.appendBytes(batchPayload);
+        Server server = Server.getInstance();
+        int compressionLevel = server != null ? server.networkCompressionLevel : 7;
+        try {
+            batch.payload = Zlib.deflate(data, compressionLevel);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return batch;
+    }
+
     public void sendChunk(int x, int z, byte[] payload, byte ordering) {
         if (!this.connected) {
             return;
@@ -702,6 +728,14 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         this.usedChunks.put(Level.chunkHash(x, z), true);
         this.chunkLoadCount++;
+
+        if (Nukkit.DEBUG > 1 && !this.spawned && this.chunkLoadCount <= 10) {
+            this.server.getLogger().debug("[sendChunk] " + this.username
+                    + " chunk(" + x + "," + z + ")"
+                    + " order=" + chunkOrder
+                    + " payloadLen=" + payload.length
+                    + " chunkLoadCount=" + this.chunkLoadCount);
+        }
 
         FullChunkDataPacket pk = new FullChunkDataPacket();
         pk.chunkX = x;
@@ -727,6 +761,16 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         Timings.playerChunkSendTimer.startTiming();
 
+        if (Nukkit.DEBUG > 1 && !this.spawned) {
+            this.server.getLogger().debug("[sendNextChunk] " + this.username
+                    + " protocol=" + this.protocol
+                    + " loadQueue=" + this.loadQueue.size()
+                    + " chunkLoadCount=" + this.chunkLoadCount
+                    + "/" + this.spawnThreshold
+                    + " spawned=" + this.spawned
+                    + " teleportPos=" + (this.teleportPosition != null ? "SET" : "NULL"));
+        }
+
         int count = 0;
 
         List<Map.Entry<Long, Integer>> entryList = new ArrayList<>(this.loadQueue.entrySet());
@@ -746,6 +790,11 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             this.level.registerChunkLoader(this, chunkX, chunkZ, false);
 
             if (!this.level.populateChunk(chunkX, chunkZ)) {
+                if (Nukkit.DEBUG > 1 && !this.spawned) {
+                    this.server.getLogger().debug("[sendNextChunk] " + this.username
+                            + " populateChunk FAILED for (" + chunkX + "," + chunkZ + ")"
+                            + " spawned=" + this.spawned + " => " + (this.spawned ? "continue" : "break"));
+                }
                 if (this.spawned && this.teleportPosition == null) {
                     continue;
                 } else {
@@ -769,6 +818,13 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
     protected void doFirstSpawn() {
         this.spawned = true;
+
+        if (Nukkit.DEBUG > 1) {
+            this.server.getLogger().debug("[doFirstSpawn] " + this.username
+                    + " protocol=" + this.protocol
+                    + " chunkLoadCount=" + this.chunkLoadCount
+                    + " sending PLAYER_SPAWN");
+        }
 
         if (!(this.protocol < ProtocolInfo.v0_16_0)) {
             this.server.sendRecipeList(this);
@@ -866,47 +922,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         this.inventory.sendContents(this);
         this.inventory.sendArmorContents(this);
-    }
-
-    protected boolean orderChunks() {
-        if (!this.connected) {
-            return false;
-        }
-
-        Timings.playerChunkOrderTimer.startTiming();
-
-        this.nextChunkOrderRun = 200;
-
-        Map<Long, Integer> newOrder = new HashMap<>();
-        Map<Long, Boolean> lastChunk = new HashMap<>(this.usedChunks);
-
-        int centerX = (int) this.x >> 4;
-        int centerZ = (int) this.z >> 4;
-        int count = 0;
-
-        for (int x = -this.chunkRadius; x <= this.chunkRadius; x++) {
-            for (int z = -this.chunkRadius; z <= this.chunkRadius; z++) {
-                int chunkX = x + centerX;
-                int chunkZ = z + centerZ;
-                int distance = (int) Math.sqrt((double) x * x + (double) z * z);
-                if (distance <= this.chunkRadius) {
-                    long index;
-                    if (!(this.usedChunks.containsKey(index = Level.chunkHash(chunkX, chunkZ))) || !this.usedChunks.get(index)) {
-                        newOrder.put(index, distance);
-                        count++;
-                    }
-                    lastChunk.remove(index);
-                }
-            }
-        }
-
-        for (long index : new ArrayList<>(lastChunk.keySet())) {
-            this.unloadChunk(Level.getHashX(index), Level.getHashZ(index));
-        }
-
-        this.loadQueue = newOrder;
-        Timings.playerChunkOrderTimer.stopTiming();
-        return true;
     }
 
     public boolean batchDataPacket(DataPacket packet) {
@@ -1749,241 +1764,52 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         return (dot1 - dot) >= -maxDiff;
     }
 
-    protected void processLogin() {
-        if (!this.server.isWhitelisted((this.getName()).toLowerCase())) {
-            this.kick(PlayerKickEvent.Reason.NOT_WHITELISTED, "Server is white-listed");
-
-            return;
-        } else if (this.isBanned()) {
-            this.kick(PlayerKickEvent.Reason.NAME_BANNED, "You are banned");
-            return;
-        } else if (this.server.getIPBans().isBanned(this.getAddress())) {
-            this.kick(PlayerKickEvent.Reason.IP_BANNED, "You are banned");
-            return;
+    protected boolean orderChunks() {
+        if (!this.connected) {
+            return false;
         }
 
-        if (this.hasPermission(Server.BROADCAST_CHANNEL_USERS)) {
-            this.server.getPluginManager().subscribeToPermission(Server.BROADCAST_CHANNEL_USERS, this);
-        }
-        if (this.hasPermission(Server.BROADCAST_CHANNEL_ADMINISTRATIVE)) {
-            this.server.getPluginManager().subscribeToPermission(Server.BROADCAST_CHANNEL_ADMINISTRATIVE, this);
+        Timings.playerChunkOrderTimer.startTiming();
+
+        this.nextChunkOrderRun = 200;
+
+        Map<Long, Integer> newOrder = new HashMap<>();
+        Map<Long, Boolean> lastChunk = new HashMap<>(this.usedChunks);
+
+        int centerX = (int) this.x >> 4;
+        int centerZ = (int) this.z >> 4;
+        int count = 0;
+
+        if (Nukkit.DEBUG > 1 && !this.spawned) {
+            this.server.getLogger().debug("[orderChunks] " + this.username
+                    + " center(" + centerX + "," + centerZ + ")"
+                    + " chunkRadius=" + this.chunkRadius
+                    + " usedChunks=" + this.usedChunks.size());
         }
 
-        for (Player p : new ArrayList<>(this.server.getOnlinePlayers().values())) {
-            if (p != this && p.getName() != null && p.getName().equalsIgnoreCase(this.getName())) {
-                if (!p.kick(PlayerKickEvent.Reason.NEW_CONNECTION, "logged in from another location")) {
-                    this.close(this.getLeaveMessage(), "Already connected");
-                    return;
+        for (int x = -this.chunkRadius; x <= this.chunkRadius; x++) {
+            for (int z = -this.chunkRadius; z <= this.chunkRadius; z++) {
+                int chunkX = x + centerX;
+                int chunkZ = z + centerZ;
+                int distance = (int) Math.sqrt((double) x * x + (double) z * z);
+                if (distance <= this.chunkRadius) {
+                    long index;
+                    if (!(this.usedChunks.containsKey(index = Level.chunkHash(chunkX, chunkZ))) || !this.usedChunks.get(index)) {
+                        newOrder.put(index, distance);
+                        count++;
+                    }
+                    lastChunk.remove(index);
                 }
-            } else if (p.loggedIn && this.getUniqueId().equals(p.getUniqueId())) {
-                if (!p.kick(PlayerKickEvent.Reason.NEW_CONNECTION, "logged in from another location")) {
-                    this.close(this.getLeaveMessage(), "Already connected");
-                    return;
-                }
             }
         }
 
-        CompoundTag nbt = this.server.getOfflinePlayerData(this.username);
-        if (nbt == null) {
-            this.close(this.getLeaveMessage(), "Invalid data");
-
-            return;
+        for (long index : new ArrayList<>(lastChunk.keySet())) {
+            this.unloadChunk(Level.getHashX(index), Level.getHashZ(index));
         }
 
-        this.playedBefore = (nbt.getLong("lastPlayed") - nbt.getLong("firstPlayed")) > 1;
-
-        boolean alive = true;
-
-        nbt.putString("NameTag", this.username);
-
-        if (0 >= nbt.getShort("Health")) {
-            alive = false;
-        }
-
-        int exp = nbt.getInt("EXP");
-        int expLevel = nbt.getInt("expLevel");
-        this.setExperience(exp, expLevel);
-
-        this.gamemode = nbt.getInt("playerGameType") & 0x03;
-        if (this.server.getForceGamemode()) {
-            this.gamemode = this.server.getGamemode();
-            nbt.putInt("playerGameType", this.gamemode);
-        }
-
-        this.adventureSettings = new AdventureSettings.Builder(this)
-                .canDestroyBlock(!isAdventure())
-                .autoJump(true)
-                .canFly(isCreative())
-                .noclip(isSpectator())
-                .build();
-
-        Level level;
-        if ((level = this.server.getLevelByName(nbt.getString("Level"))) == null || !alive) {
-            this.setLevel(this.server.getDefaultLevel());
-            nbt.putString("Level", this.level.getName());
-            nbt.getList("Pos", DoubleTag.class)
-                    .add(new DoubleTag("0", this.level.getSpawnLocation().x))
-                    .add(new DoubleTag("1", this.level.getSpawnLocation().y))
-                    .add(new DoubleTag("2", this.level.getSpawnLocation().z));
-        } else {
-            this.setLevel(level);
-        }
-
-        for (Tag achievement : nbt.getCompound("Achievements").getAllTags()) {
-            if (!(achievement instanceof ByteTag)) {
-                continue;
-            }
-
-            if (((ByteTag) achievement).getData() > 0) {
-                this.achievements.add(achievement.getName());
-            }
-        }
-
-        nbt.putLong("lastPlayed", System.currentTimeMillis() / 1000);
-
-        if (this.server.getAutoSave()) {
-            this.server.saveOfflinePlayerData(this.username, nbt, true);
-        }
-
-        ListTag<DoubleTag> posList = nbt.getList("Pos", DoubleTag.class);
-
-        super.init(this.level.getChunk((int) posList.get(0).data >> 4, (int) posList.get(2).data >> 4, true), nbt);
-
-        if (!this.namedTag.contains("foodLevel")) {
-            this.namedTag.putInt("foodLevel", 20);
-        }
-        int foodLevel = this.namedTag.getInt("foodLevel");
-        if (!this.namedTag.contains("FoodSaturationLevel")) {
-            this.namedTag.putFloat("FoodSaturationLevel", 20);
-        }
-        float foodSaturationLevel = this.namedTag.getFloat("foodSaturationLevel");
-        this.foodData = new PlayerFood(this, foodLevel, foodSaturationLevel);
-
-        PlayerLoginEvent ev;
-        this.server.getPluginManager().callEvent(ev = new PlayerLoginEvent(this, "Plugin reason"));
-        if (ev.isCancelled()) {
-            this.close(this.getLeaveMessage(), ev.getKickMessage());
-
-            return;
-        }
-
-        this.server.addOnlinePlayer(this);
-        this.loggedIn = true;
-
-        if (this.isCreative()) {
-            this.inventory.setHeldItemSlot(0);
-        } else {
-            this.inventory.setHeldItemSlot(this.inventory.getHotbarSlotIndex(0));
-        }
-
-        if (this.isSpectator()) this.keepMovement = true;
-
-        if (this.spawnPosition == null && this.namedTag.contains("SpawnLevel") && (level = this.server.getLevelByName(this.namedTag.getString("SpawnLevel"))) != null) {
-            this.spawnPosition = new Position(this.namedTag.getInt("SpawnX"), this.namedTag.getInt("SpawnY"), this.namedTag.getInt("SpawnZ"), level);
-        }
-
-        Position spawnPosition = this.getSpawn();
-        StartGamePacket startGamePacket = new StartGamePacket();
-        startGamePacket.entityUniqueId = this.id;
-        startGamePacket.entityRuntimeId = this.id;
-        startGamePacket.playerGamemode = getClientFriendlyGamemode(this.gamemode);
-        startGamePacket.x = (float) this.x;
-        startGamePacket.y = (float) this.y;
-        startGamePacket.z = (float) this.z;
-        startGamePacket.yaw = (float) this.yaw;
-        startGamePacket.pitch = (float) this.pitch;
-        startGamePacket.seed = -1;
-        startGamePacket.dimension = (byte) (this.level.getDimension() & 0xff);
-        startGamePacket.gamemode = getClientFriendlyGamemode(this.gamemode);
-        startGamePacket.difficulty = this.server.getDifficulty();
-        startGamePacket.spawnX = (int) spawnPosition.x;
-        startGamePacket.spawnY = (int) spawnPosition.y;
-        startGamePacket.spawnZ = (int) spawnPosition.z;
-        startGamePacket.hasAchievementsDisabled = true;
-        startGamePacket.dayCycleStopTime = -1;
-        startGamePacket.eduMode = false;
-        startGamePacket.rainLevel = 0;
-        startGamePacket.lightningLevel = 0;
-        startGamePacket.commandsEnabled = this.isEnableClientCommand();
-        startGamePacket.levelId = "";
-        startGamePacket.worldName = this.getServer().getNetwork().getName();
-        startGamePacket.generator = 1; //0 old, 1 infinite, 2 flat
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
-            startGamePacket.entityUniqueId = 0;
-            startGamePacket.entityRuntimeId = 0;
-            startGamePacket.b1 = true;
-            startGamePacket.b2 = true;
-            startGamePacket.b3 = false;
-            startGamePacket.unknownstr = "";
-        }
-        this.dataPacket(startGamePacket);
-
-        SetTimePacket setTimePacket = new SetTimePacket();
-        setTimePacket.time = this.level.getTime();
-        this.dataPacket(setTimePacket);
-
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
-            SetSpawnPositionPacket setSpawnPositionPacket = new SetSpawnPositionPacket();
-            setSpawnPositionPacket.x = (int) spawnPosition.x;
-            setSpawnPositionPacket.y = (int) spawnPosition.y;
-            setSpawnPositionPacket.z = (int) spawnPosition.z;
-            this.dataPacket(setSpawnPositionPacket);
-
-            SetHealthPacket setHealthPacket = new SetHealthPacket();
-            setHealthPacket.health = (int) this.getHealth();
-            this.dataPacket(setHealthPacket);
-
-            SetDifficultyPacket setDifficultyPacket = new SetDifficultyPacket();
-            setDifficultyPacket.difficulty = this.server.getDifficulty();
-            this.dataPacket(setDifficultyPacket);
-        }
-
-        this.setMovementSpeed(DEFAULT_SPEED);
-        if (!(this.protocol < ProtocolInfo.v0_16_0)) {
-            this.sendAttributes();
-        }
-        this.setNameTagVisible(true);
-        this.setNameTagAlwaysVisible(true);
-        this.setCanClimb(true);
-
-        String clientVersion = ProtocolInfo.getMinecraftVersion(this.protocol);
-        if (this.loginChainData != null) {
-            String gameVersion = this.loginChainData.getGameVersion();
-            if (gameVersion != null && !gameVersion.isEmpty()) {
-                clientVersion = gameVersion;
-            }
-        }
-
-        this.server.getLogger().info(this.getServer().getLanguage().translateString("nukkit.player.logIn",
-                TextFormat.AQUA + this.username + TextFormat.WHITE,
-                this.ip,
-                String.valueOf(this.port),
-                this.protocol + " (" + clientVersion + ")"));
-
-        if (this.isOp()) {
-            this.setRemoveFormat(false);
-        }
-
-        if (this.gamemode == Player.SPECTATOR) {
-            ContainerSetContentPacket containerSetContentPacket = new ContainerSetContentPacket();
-            containerSetContentPacket.windowid = ContainerSetContentPacket.SPECIAL_CREATIVE;
-            containerSetContentPacket.eid = this.id;
-            this.dataPacket(containerSetContentPacket);
-        } else {
-            ContainerSetContentPacket containerSetContentPacket = new ContainerSetContentPacket();
-            containerSetContentPacket.windowid = ContainerSetContentPacket.SPECIAL_CREATIVE;
-            containerSetContentPacket.eid = this.id;
-            containerSetContentPacket.slots = Item.getCreativeItems(this.protocol).stream().toArray(Item[]::new);
-            this.dataPacket(containerSetContentPacket);
-        }
-
-        this.setEnableClientCommand(true);
-
-        this.server.sendFullPlayerListData(this);
-
-        this.forceMovement = this.teleportPosition = this.getPosition();
-
-        this.server.onPlayerLogin(this);
+        this.loadQueue = newOrder;
+        Timings.playerChunkOrderTimer.stopTiming();
+        return true;
     }
 
     public void handleDataPacket(DataPacket packet) {
@@ -4588,42 +4414,246 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         }
     }
 
-    protected boolean checkTeleportPosition() {
-        if (this.teleportPosition != null) {
-            int chunkX = (int) this.teleportPosition.x >> 4;
-            int chunkZ = (int) this.teleportPosition.z >> 4;
+    protected void processLogin() {
+        if (!this.server.isWhitelisted((this.getName()).toLowerCase())) {
+            this.kick(PlayerKickEvent.Reason.NOT_WHITELISTED, "Server is white-listed");
 
-            for (int X = -1; X <= 1; ++X) {
-                for (int Z = -1; Z <= 1; ++Z) {
-                    long index = Level.chunkHash(chunkX + X, chunkZ + Z);
-                    if (!this.usedChunks.containsKey(index) || !this.usedChunks.get(index)) {
-                        return false;
-                    }
-                }
-            }
-
-            /*if (this.isLevelChange) { //TODO: remove this
-                PlayStatusPacket statusPacket0 = new PlayStatusPacket();//Weather
-                this.getLevel().sendWeather(this);
-                //Update time
-                this.getLevel().sendTime(this);
-                statusPacket0.status = PlayStatusPacket.PLAYER_SPAWN;
-                this.dataPacket(statusPacket0);
-
-                //Weather
-                this.getLevel().sendWeather(this);
-                //Update time
-                this.getLevel().sendTime(this);
-            }*/
-
-            this.spawnToAll();
-            this.isLevelChange = false;
-            this.forceMovement = this.teleportPosition;
-            this.teleportPosition = null;
-            return true;
+            return;
+        } else if (this.isBanned()) {
+            this.kick(PlayerKickEvent.Reason.NAME_BANNED, "You are banned");
+            return;
+        } else if (this.server.getIPBans().isBanned(this.getAddress())) {
+            this.kick(PlayerKickEvent.Reason.IP_BANNED, "You are banned");
+            return;
         }
 
-        return false;
+        if (this.hasPermission(Server.BROADCAST_CHANNEL_USERS)) {
+            this.server.getPluginManager().subscribeToPermission(Server.BROADCAST_CHANNEL_USERS, this);
+        }
+        if (this.hasPermission(Server.BROADCAST_CHANNEL_ADMINISTRATIVE)) {
+            this.server.getPluginManager().subscribeToPermission(Server.BROADCAST_CHANNEL_ADMINISTRATIVE, this);
+        }
+
+        for (Player p : new ArrayList<>(this.server.getOnlinePlayers().values())) {
+            if (p != this && p.getName() != null && p.getName().equalsIgnoreCase(this.getName())) {
+                if (!p.kick(PlayerKickEvent.Reason.NEW_CONNECTION, "logged in from another location")) {
+                    this.close(this.getLeaveMessage(), "Already connected");
+                    return;
+                }
+            } else if (p.loggedIn && this.getUniqueId().equals(p.getUniqueId())) {
+                if (!p.kick(PlayerKickEvent.Reason.NEW_CONNECTION, "logged in from another location")) {
+                    this.close(this.getLeaveMessage(), "Already connected");
+                    return;
+                }
+            }
+        }
+
+        CompoundTag nbt = this.server.getOfflinePlayerData(this.username);
+        if (nbt == null) {
+            this.close(this.getLeaveMessage(), "Invalid data");
+
+            return;
+        }
+
+        this.playedBefore = (nbt.getLong("lastPlayed") - nbt.getLong("firstPlayed")) > 1;
+
+        boolean alive = true;
+
+        nbt.putString("NameTag", this.username);
+
+        if (0 >= nbt.getShort("Health")) {
+            alive = false;
+        }
+
+        int exp = nbt.getInt("EXP");
+        int expLevel = nbt.getInt("expLevel");
+        this.setExperience(exp, expLevel);
+
+        this.gamemode = nbt.getInt("playerGameType") & 0x03;
+        if (this.server.getForceGamemode()) {
+            this.gamemode = this.server.getGamemode();
+            nbt.putInt("playerGameType", this.gamemode);
+        }
+
+        this.adventureSettings = new AdventureSettings.Builder(this)
+                .canDestroyBlock(!isAdventure())
+                .autoJump(true)
+                .canFly(isCreative())
+                .noclip(isSpectator())
+                .build();
+
+        Level level;
+        if ((level = this.server.getLevelByName(nbt.getString("Level"))) == null || !alive) {
+            this.setLevel(this.server.getDefaultLevel());
+            nbt.putString("Level", this.level.getName());
+            nbt.getList("Pos", DoubleTag.class)
+                    .add(new DoubleTag("0", this.level.getSpawnLocation().x))
+                    .add(new DoubleTag("1", this.level.getSpawnLocation().y))
+                    .add(new DoubleTag("2", this.level.getSpawnLocation().z));
+        } else {
+            this.setLevel(level);
+        }
+
+        for (Tag achievement : nbt.getCompound("Achievements").getAllTags()) {
+            if (!(achievement instanceof ByteTag)) {
+                continue;
+            }
+
+            if (((ByteTag) achievement).getData() > 0) {
+                this.achievements.add(achievement.getName());
+            }
+        }
+
+        nbt.putLong("lastPlayed", System.currentTimeMillis() / 1000);
+
+        if (this.server.getAutoSave()) {
+            this.server.saveOfflinePlayerData(this.username, nbt, true);
+        }
+
+        ListTag<DoubleTag> posList = nbt.getList("Pos", DoubleTag.class);
+
+        super.init(this.level.getChunk((int) posList.get(0).data >> 4, (int) posList.get(2).data >> 4, true), nbt);
+
+        if (!this.namedTag.contains("foodLevel")) {
+            this.namedTag.putInt("foodLevel", 20);
+        }
+        int foodLevel = this.namedTag.getInt("foodLevel");
+        if (!this.namedTag.contains("FoodSaturationLevel")) {
+            this.namedTag.putFloat("FoodSaturationLevel", 20);
+        }
+        float foodSaturationLevel = this.namedTag.getFloat("foodSaturationLevel");
+        this.foodData = new PlayerFood(this, foodLevel, foodSaturationLevel);
+
+        PlayerLoginEvent ev;
+        this.server.getPluginManager().callEvent(ev = new PlayerLoginEvent(this, "Plugin reason"));
+        if (ev.isCancelled()) {
+            this.close(this.getLeaveMessage(), ev.getKickMessage());
+
+            return;
+        }
+
+        this.server.addOnlinePlayer(this);
+        this.loggedIn = true;
+
+        if (this.isCreative()) {
+            this.inventory.setHeldItemSlot(0);
+        } else {
+            this.inventory.setHeldItemSlot(this.inventory.getHotbarSlotIndex(0));
+        }
+
+        if (this.isSpectator()) this.keepMovement = true;
+
+        if (this.spawnPosition == null && this.namedTag.contains("SpawnLevel") && (level = this.server.getLevelByName(this.namedTag.getString("SpawnLevel"))) != null) {
+            this.spawnPosition = new Position(this.namedTag.getInt("SpawnX"), this.namedTag.getInt("SpawnY"), this.namedTag.getInt("SpawnZ"), level);
+        }
+
+        Position spawnPosition = this.getSpawn();
+        StartGamePacket startGamePacket = new StartGamePacket();
+        startGamePacket.entityUniqueId = this.id;
+        startGamePacket.entityRuntimeId = this.id;
+        startGamePacket.playerGamemode = getClientFriendlyGamemode(this.gamemode);
+        startGamePacket.x = (float) this.x;
+        startGamePacket.y = (float) this.y;
+        startGamePacket.z = (float) this.z;
+        startGamePacket.yaw = (float) this.yaw;
+        startGamePacket.pitch = (float) this.pitch;
+        startGamePacket.seed = -1;
+        startGamePacket.dimension = (byte) (this.level.getDimension() & 0xff);
+        startGamePacket.gamemode = getClientFriendlyGamemode(this.gamemode);
+        startGamePacket.difficulty = this.server.getDifficulty();
+        startGamePacket.spawnX = (int) spawnPosition.x;
+        startGamePacket.spawnY = (int) spawnPosition.y;
+        startGamePacket.spawnZ = (int) spawnPosition.z;
+        startGamePacket.hasAchievementsDisabled = true;
+        startGamePacket.dayCycleStopTime = -1;
+        startGamePacket.eduMode = false;
+        startGamePacket.rainLevel = 0;
+        startGamePacket.lightningLevel = 0;
+        startGamePacket.commandsEnabled = this.isEnableClientCommand();
+        startGamePacket.levelId = "";
+        startGamePacket.worldName = this.getServer().getNetwork().getName();
+        startGamePacket.generator = 1; //0 old, 1 infinite, 2 flat
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            startGamePacket.entityUniqueId = 0;
+            startGamePacket.entityRuntimeId = 0;
+            startGamePacket.b1 = true;
+            startGamePacket.b2 = true;
+            startGamePacket.b3 = false;
+            startGamePacket.unknownstr = "";
+        }
+        this.dataPacket(startGamePacket);
+
+        SetTimePacket setTimePacket = new SetTimePacket();
+        setTimePacket.time = this.level.getTime();
+        this.dataPacket(setTimePacket);
+
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            SetSpawnPositionPacket setSpawnPositionPacket = new SetSpawnPositionPacket();
+            setSpawnPositionPacket.x = (int) spawnPosition.x;
+            setSpawnPositionPacket.y = (int) spawnPosition.y;
+            setSpawnPositionPacket.z = (int) spawnPosition.z;
+            this.dataPacket(setSpawnPositionPacket);
+
+            SetHealthPacket setHealthPacket = new SetHealthPacket();
+            setHealthPacket.health = (int) this.getHealth();
+            this.dataPacket(setHealthPacket);
+
+            SetDifficultyPacket setDifficultyPacket = new SetDifficultyPacket();
+            setDifficultyPacket.difficulty = this.server.getDifficulty();
+            this.dataPacket(setDifficultyPacket);
+        }
+
+        this.setMovementSpeed(DEFAULT_SPEED);
+        this.sendAttributes();
+        this.setNameTagVisible(true);
+        this.setNameTagAlwaysVisible(true);
+        this.setCanClimb(true);
+
+        String clientVersion = ProtocolInfo.getMinecraftVersion(this.protocol);
+        if (this.loginChainData != null) {
+            String gameVersion = this.loginChainData.getGameVersion();
+            if (gameVersion != null && !gameVersion.isEmpty()) {
+                clientVersion = gameVersion;
+            }
+        }
+
+        this.server.getLogger().info(this.getServer().getLanguage().translateString("nukkit.player.logIn",
+                TextFormat.AQUA + this.username + TextFormat.WHITE,
+                this.ip,
+                String.valueOf(this.port),
+                this.protocol + " (" + clientVersion + ")"));
+
+        if (this.isOp()) {
+            this.setRemoveFormat(false);
+        }
+
+        if (this.gamemode == Player.SPECTATOR) {
+            ContainerSetContentPacket containerSetContentPacket = new ContainerSetContentPacket();
+            containerSetContentPacket.windowid = ContainerSetContentPacket.SPECIAL_CREATIVE;
+            containerSetContentPacket.eid = this.id;
+            this.dataPacket(containerSetContentPacket);
+        } else {
+            ContainerSetContentPacket containerSetContentPacket = new ContainerSetContentPacket();
+            containerSetContentPacket.windowid = ContainerSetContentPacket.SPECIAL_CREATIVE;
+            containerSetContentPacket.eid = this.id;
+            containerSetContentPacket.slots = Item.getCreativeItems(this.protocol).stream().toArray(Item[]::new);
+            this.dataPacket(containerSetContentPacket);
+        }
+
+        this.setEnableClientCommand(true);
+
+        this.server.sendFullPlayerListData(this);
+
+        this.forceMovement = this.teleportPosition = this.getPosition();
+
+        this.server.onPlayerLogin(this);
+
+        if (this.protocol < ProtocolInfo.v0_16_0) {
+            ChunkRadiusUpdatedPacket chunkRadiusUpdatedPacket = new ChunkRadiusUpdatedPacket();
+            chunkRadiusUpdatedPacket.radius = this.chunkRadius;
+            this.dataPacket(chunkRadiusUpdatedPacket);
+            this.nextChunkOrderRun = 0;
+        }
     }
 
     private boolean isLevelChange = false;
@@ -4969,30 +4999,53 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         return getChunkCacheFromData(chunkX, chunkZ, payload, FullChunkDataPacket.ORDER_COLUMNS, ProtocolInfo.CURRENT_PROTOCOL);
     }
 
-    public static BatchPacket getChunkCacheFromData(int chunkX, int chunkZ, byte[] payload, byte ordering, int protocol) {
-        FullChunkDataPacket pk = new FullChunkDataPacket();
-        pk.protocol = protocol;
-        pk.chunkX = chunkX;
-        pk.chunkZ = chunkZ;
-        pk.order = ordering;
-        pk.data = payload;
-        pk.tryEncode();
+    protected boolean checkTeleportPosition() {
+        if (this.teleportPosition != null) {
+            int chunkX = (int) this.teleportPosition.x >> 4;
+            int chunkZ = (int) this.teleportPosition.z >> 4;
 
-        BatchPacket batch = new BatchPacket();
-        batch.protocol = protocol;
-        byte[][] batchPayload = new byte[2][];
-        byte[] buf = pk.getBuffer();
-        batchPayload[0] = ProtocolInfo.getPacketPoolProtocol(protocol) == ProtocolInfo.v0_14_2 ? Binary.writeInt(buf.length) : Binary.writeUnsignedVarInt(buf.length);
-        batchPayload[1] = buf;
-        byte[] data = Binary.appendBytes(batchPayload);
-        Server server = Server.getInstance();
-        int compressionLevel = server != null ? server.networkCompressionLevel : 7;
-        try {
-            batch.payload = Zlib.deflate(data, compressionLevel);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+            for (int X = -1; X <= 1; ++X) {
+                for (int Z = -1; Z <= 1; ++Z) {
+                    long index = Level.chunkHash(chunkX + X, chunkZ + Z);
+                    if (!this.usedChunks.containsKey(index) || !this.usedChunks.get(index)) {
+                        if (Nukkit.DEBUG > 1 && !this.spawned) {
+                            this.server.getLogger().debug("[checkTeleportPosition] " + this.username
+                                    + " waiting for chunk(" + (chunkX + X) + "," + (chunkZ + Z) + ")"
+                                    + " usedChunks.contains=" + this.usedChunks.containsKey(index)
+                                    + " value=" + this.usedChunks.get(index));
+                        }
+                        return false;
+                    }
+                }
+            }
+
+            if (Nukkit.DEBUG > 1) {
+                this.server.getLogger().debug("[checkTeleportPosition] " + this.username
+                        + " all 3x3 chunks loaded, clearing teleportPosition");
+            }
+
+            /*if (this.isLevelChange) { //TODO: remove this
+                PlayStatusPacket statusPacket0 = new PlayStatusPacket();//Weather
+                this.getLevel().sendWeather(this);
+                //Update time
+                this.getLevel().sendTime(this);
+                statusPacket0.status = PlayStatusPacket.PLAYER_SPAWN;
+                this.dataPacket(statusPacket0);
+
+                //Weather
+                this.getLevel().sendWeather(this);
+                //Update time
+                this.getLevel().sendTime(this);
+            }*/
+
+            this.spawnToAll();
+            this.isLevelChange = false;
+            this.forceMovement = this.teleportPosition;
+            this.teleportPosition = null;
+            return true;
         }
-        return batch;
+
+        return false;
     }
 
     private boolean foodEnabled = true;

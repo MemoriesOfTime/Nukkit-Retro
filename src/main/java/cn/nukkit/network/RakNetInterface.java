@@ -8,8 +8,8 @@ import cn.nukkit.event.server.QueryRegenerateEvent;
 import cn.nukkit.network.protocol.BatchPacket;
 import cn.nukkit.network.protocol.DataPacket;
 import cn.nukkit.network.protocol.ProtocolInfo;
-import cn.nukkit.network.protocol.ProtocolInfo.SupportedProtocol;
 import cn.nukkit.network.protocol.ProtocolInfo.SinceProtocol;
+import cn.nukkit.network.protocol.ProtocolInfo.SupportedProtocol;
 import cn.nukkit.network.protocol.ProtocolInfo.UnsupportedSince;
 import cn.nukkit.raknet.RakNet;
 import cn.nukkit.raknet.protocol.EncapsulatedPacket;
@@ -255,7 +255,13 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
         if (this.identifiers.containsKey(player.rawHashCode())) {
             byte[] buffer;
             if (packet.pid() == ProtocolInfo.BATCH_PACKET) {
-                buffer = ((BatchPacket) packet).payload;
+                byte[] payload = ((BatchPacket) packet).payload;
+                if (ProtocolInfo.isBefore0160(player.protocol)) {
+                    // 0.15.x: [packetID(0x06)][payload_length:int32BE][compressed_data]
+                    buffer = Binary.appendBytes(new byte[]{0x06}, Binary.writeInt(payload.length), payload);
+                } else {
+                    buffer = payload;
+                }
             } else if (!needACK) {
                 this.server.batchPackets(new Player[]{player}, new DataPacket[]{packet}, true);
                 return null;
@@ -383,7 +389,14 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
             if (data == null) {
                 return null;
             }
-            data.setBuffer(buffer, 1);
+            data.protocol = player.protocol;
+            // 0.15.x 及以下: [0xfe][packetID(0x06)][int32_len][compressed_data]
+            // 0.16.0+:       [0xfe][compressed_data]
+            int start = 1;
+            if (buffer.length >= 6 && buffer[1] == 0x06) {
+                start = 6; // 跳过 0xfe(已由[0]处理) + 0x06(1B) + int32_len(4B)
+            }
+            data.setBuffer(buffer, start);
             return data;
         }
 

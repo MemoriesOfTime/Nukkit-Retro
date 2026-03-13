@@ -1,5 +1,6 @@
 package cn.nukkit.network.protocol;
 
+import cn.nukkit.Nukkit;
 import cn.nukkit.Server;
 import cn.nukkit.entity.data.Skin;
 import cn.nukkit.utils.Binary;
@@ -24,6 +25,7 @@ public class LoginPacket extends DataPacket {
 
     public String username;
     public int clientProtocol;
+    @ProtocolInfo.SinceProtocol(ProtocolInfo.v0_16_0)
     public byte gameEdition;
     public UUID clientUUID;
     public long clientId;
@@ -52,10 +54,17 @@ public class LoginPacket extends DataPacket {
         }
 
         this.clientProtocol = this.getInt();
+        if (Nukkit.DEBUG > 1) {
+            Server.getInstance().getLogger().debug("LoginPacket.decode: clientProtocol=" + this.clientProtocol + ", pk.protocol=" + this.protocol);
+        }
         if ((this.clientProtocol < ProtocolInfo.v0_16_0)) {
+            int zlibLen = this.getInt();
+            if (Nukkit.DEBUG > 1) {
+                Server.getInstance().getLogger().debug("LoginPacket.decode: 0.15.x format, zlibLen=" + zlibLen);
+            }
             byte[] str;
             try {
-                str = Zlib.inflate(this.get(this.getInt()), 64 * 1024 * 1024);
+                str = Zlib.inflate(this.get(zlibLen), 64 * 1024 * 1024);
             } catch (Exception e) {
                 Server.getInstance().getLogger().error("Failed to decompress login data for protocol " + this.clientProtocol, e);
                 return;
@@ -63,6 +72,9 @@ public class LoginPacket extends DataPacket {
             this.setBuffer(str, 0);
         } else {
             this.gameEdition = (byte) this.getByte();
+            if (Nukkit.DEBUG > 1) {
+                Server.getInstance().getLogger().debug("LoginPacket.decode: 0.16.0+ format, gameEdition=" + this.gameEdition);
+            }
             if (ProtocolInfo.isLegacyProtocol(this.clientProtocol)) {
                 byte[] str;
                 try {

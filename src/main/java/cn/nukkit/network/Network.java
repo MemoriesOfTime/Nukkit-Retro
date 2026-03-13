@@ -4,8 +4,8 @@ import cn.nukkit.Nukkit;
 import cn.nukkit.Player;
 import cn.nukkit.Server;
 import cn.nukkit.network.protocol.*;
-import cn.nukkit.network.protocol.ProtocolInfo.SupportedProtocol;
 import cn.nukkit.network.protocol.ProtocolInfo.SinceProtocol;
+import cn.nukkit.network.protocol.ProtocolInfo.SupportedProtocol;
 import cn.nukkit.network.protocol.ProtocolInfo.UnsupportedSince;
 import cn.nukkit.utils.Binary;
 import cn.nukkit.utils.BinaryStream;
@@ -151,13 +151,31 @@ public class Network {
         try {
             data = Zlib.inflate(packet.payload, 64 * 1024 * 1024);
         } catch (Exception e) {
+            if (Nukkit.DEBUG > 1) {
+                this.server.getLogger().debug("Failed to inflate BatchPacket" + (player != null ? " from " + player.getName() : ""));
+                this.server.getLogger().logException(e);
+            }
             return;
         }
 
         int len = data.length;
         @SupportedProtocol int protocol = packet.protocol != Integer.MAX_VALUE ? packet.protocol : (player == null ? ProtocolInfo.CURRENT_PROTOCOL : player.protocol);
-        if (ProtocolInfo.getPacketPoolProtocol(protocol) == ProtocolInfo.v0_14_2) {
+
+        // 当协议版本未知时，从批量包数据中预检测协议版本
+        if (protocol == Integer.MAX_VALUE && len >= 5) {
+            protocol = detectProtocolFromBatchData(data, len);
+            if (player != null && player.protocol == Integer.MAX_VALUE) {
+                player.protocol = protocol;
+            }
+            if (Nukkit.DEBUG > 1) {
+                this.server.getLogger().debug("Pre-detected protocol " + protocol + " from batch data" + (player != null ? " for " + player.getAddress() : ""));
+            }
+        }
+
+        if (ProtocolInfo.isBefore0160(protocol)) {
+            // 0.14.x ~ 0.15.x: 内部包使用4字节大端int长度前缀
             int offset = 0;
+            boolean is014 = ProtocolInfo.getPacketPoolProtocol(protocol) == ProtocolInfo.v0_14_2;
             try {
                 List<DataPacket> packets = new ArrayList<>();
                 while (offset < len) {
@@ -165,16 +183,50 @@ public class Network {
                     offset += 4;
                     byte[] buf = Binary.subBytes(data, offset, pkLen);
                     offset += pkLen;
-                    if (buf.length < 2) {
-                        continue;
-                    }
 
-                    DataPacket pk = this.getPacket(buf[1] & 0xff, protocol);
-                    if (pk != null) {
-                        pk.protocol = protocol;
-                        pk.setBuffer(buf, 2);
-                        pk.decode();
-                        packets.add(pk);
+                    if (is014) {
+                        // 0.14.x: [headerByte][packetID][data...]
+                        if (buf.length < 2) {
+                            continue;
+                        }
+                        DataPacket pk = this.getPacket(buf[1] & 0xff, protocol);
+                        if (pk != null) {
+                            pk.protocol = protocol;
+                            pk.setBuffer(buf, 2);
+                            pk.decode();
+                            packets.add(pk);
+                        }
+                    } else {
+                        // 0.15.x: [packetID][data...]
+                        if (buf.length < 1) {
+                            continue;
+                        }
+
+                        // 对于 LoginPacket，检测协议版本
+                        @SupportedProtocol int pktProtocol = protocol;
+                        if ((buf[0] & 0xff) == (ProtocolInfo.LOGIN_PACKET & 0xff) && buf.length >= 5) {
+                            int clientProtocol = Binary.readInt(Binary.subBytes(buf, 1, 4));
+                            if (ProtocolInfo.isSupportedProtocol(clientProtocol)) {
+                                pktProtocol = ProtocolInfo.getPacketPoolProtocol(clientProtocol);
+                                if (player != null && player.protocol == Integer.MAX_VALUE) {
+                                    player.protocol = clientProtocol;
+                                }
+                                protocol = pktProtocol;
+                                if (Nukkit.DEBUG > 1) {
+                                    this.server.getLogger().debug("LoginPacket detected: clientProtocol=" + clientProtocol + ", poolProtocol=" + pktProtocol + (player != null ? ", player=" + player.getAddress() : ""));
+                                }
+                            } else if (Nukkit.DEBUG > 1) {
+                                this.server.getLogger().debug("LoginPacket with unsupported protocol " + clientProtocol + (player != null ? " from " + player.getAddress() : ""));
+                            }
+                        }
+
+                        DataPacket pk = this.getPacket(buf[0] & 0xff, pktProtocol);
+                        if (pk != null) {
+                            pk.protocol = pktProtocol;
+                            pk.setBuffer(buf, 1);
+                            pk.decode();
+                            packets.add(pk);
+                        }
                     }
                 }
 
@@ -194,9 +246,29 @@ public class Network {
             while (stream.offset < len) {
                 byte[] buf = stream.getByteArray();
 
+                // 对于 LoginPacket，先检测协议版本
+                @SupportedProtocol int pktProtocol = protocol;
+                if ((buf[0] & 0xff) == (ProtocolInfo.LOGIN_PACKET & 0xff) && buf.length >= 5) {
+                    // 读取 clientProtocol 字段（偏移量 1 开始的 int）
+                    int clientProtocol = Binary.readInt(Binary.subBytes(buf, 1, 4));
+                    if (ProtocolInfo.isSupportedProtocol(clientProtocol)) {
+                        pktProtocol = ProtocolInfo.getPacketPoolProtocol(clientProtocol);
+                        // 第一时间记录玩家协议版本
+                        if (player != null && player.protocol == Integer.MAX_VALUE) {
+                            player.protocol = clientProtocol;
+                        }
+                        protocol = pktProtocol;
+                        if (Nukkit.DEBUG > 1) {
+                            this.server.getLogger().debug("LoginPacket detected: clientProtocol=" + clientProtocol + ", poolProtocol=" + pktProtocol + (player != null ? ", player=" + player.getAddress() : ""));
+                        }
+                    } else if (Nukkit.DEBUG > 1) {
+                        this.server.getLogger().debug("LoginPacket with unsupported protocol " + clientProtocol + (player != null ? " from " + player.getAddress() : ""));
+                    }
+                }
+
                 DataPacket pk;
-                if ((pk = this.getPacket(buf[0] & 0xff, protocol)) != null) {
-                    pk.protocol = protocol;
+                if ((pk = this.getPacket(buf[0] & 0xff, pktProtocol)) != null) {
+                    pk.protocol = pktProtocol;
                     pk.setBuffer(buf, 1);
                     pk.decode();
                     packets.add(pk);
@@ -240,6 +312,59 @@ public class Network {
 
     public DataPacket getPacket(byte id) {
         return this.getPacket(id & 0xff, ProtocolInfo.CURRENT_PROTOCOL);
+    }
+
+    /**
+     * 当协议版本未知时，从批量包解压数据中预检测协议版本。
+     * 先尝试 0.15.x+ 格式（VarInt 长度前缀），再尝试 0.14.x 格式（4字节 int 长度前缀）。
+     */
+    private @SupportedProtocol int detectProtocolFromBatchData(byte[] data, int len) {
+        // 先尝试 0.16.0+ 格式：VarInt 长度 + [packetID, clientProtocol, ...]
+        try {
+            BinaryStream stream = new BinaryStream(data);
+            byte[] buf = stream.getByteArray();
+            if (buf.length >= 5 && (buf[0] & 0xff) == (ProtocolInfo.LOGIN_PACKET & 0xff)) {
+                int clientProtocol = Binary.readInt(Binary.subBytes(buf, 1, 4));
+                if (ProtocolInfo.isSupportedProtocol(clientProtocol)) {
+                    return clientProtocol;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        // 再尝试 0.15.x 格式：4字节 int 长度 + [packetID(0x01), clientProtocol, ...]
+        if (len >= 9) {
+            try {
+                int pkLen = Binary.readInt(Binary.subBytes(data, 0, 4));
+                if (pkLen > 0 && pkLen <= len - 4) {
+                    byte[] buf = Binary.subBytes(data, 4, pkLen);
+                    if (buf.length >= 5 && (buf[0] & 0xff) == (ProtocolInfo.LOGIN_PACKET & 0xff)) {
+                        int clientProtocol = Binary.readInt(Binary.subBytes(buf, 1, 4));
+                        if (ProtocolInfo.isSupportedProtocol(clientProtocol) && clientProtocol < ProtocolInfo.v0_16_0) {
+                            return clientProtocol;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // 最后尝试 0.14.x 格式：4字节 int 长度 + [headerByte, packetID, ...]
+        // 0.14.x LoginPacket 的翻译 ID 为 0x8f
+        if (len >= 8) {
+            try {
+                int pkLen = Binary.readInt(Binary.subBytes(data, 0, 4));
+                if (pkLen > 0 && pkLen <= len - 4) {
+                    byte[] buf = Binary.subBytes(data, 4, pkLen);
+                    if (buf.length >= 2 && (buf[1] & 0xff) == 0x8f) {
+                        return ProtocolInfo.v0_14_2;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        return ProtocolInfo.CURRENT_PROTOCOL;
     }
 
     public DataPacket getPacket(int id, @SupportedProtocol int protocol) {
