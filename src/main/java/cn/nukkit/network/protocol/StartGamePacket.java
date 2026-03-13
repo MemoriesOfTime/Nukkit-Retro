@@ -56,6 +56,26 @@ public class StartGamePacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
+        if ((this.protocol < ProtocolInfo.v0_15_0)) {
+            this.putInt(this.seed);
+            this.putByte(this.dimension);
+            this.putInt(this.generator);
+            this.putInt(this.gamemode);
+            this.putLong(this.entityUniqueId);
+            this.putInt(this.spawnX);
+            this.putInt(this.spawnY);
+            this.putInt(this.spawnZ);
+            this.putFloat(this.x);
+            this.putFloat(this.y);
+            this.putFloat(this.z);
+            this.putBoolean(this.b1);
+            this.putBoolean(this.b2);
+            this.putBoolean(this.b3);
+            this.putString(this.unknownstr);
+            this.putByte((byte) 0);
+            return;
+        }
+
         if ((this.protocol < ProtocolInfo.v0_16_0)) {
             this.putInt(this.seed);
             this.putByte(this.dimension);

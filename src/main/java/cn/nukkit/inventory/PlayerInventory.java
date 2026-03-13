@@ -14,6 +14,7 @@ import cn.nukkit.network.protocol.ContainerSetContentPacket;
 import cn.nukkit.network.protocol.ContainerSetSlotPacket;
 import cn.nukkit.network.protocol.MobArmorEquipmentPacket;
 import cn.nukkit.network.protocol.MobEquipmentPacket;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 import java.util.Collection;
 
@@ -108,7 +109,7 @@ public class PlayerInventory extends BaseInventory {
         Item item = this.getItemInHand();
 
         MobEquipmentPacket pk = new MobEquipmentPacket();
-        pk.eid = this.getHolder().getId();
+        pk.eid = player.equals(this.getHolder()) && player.protocol < ProtocolInfo.v0_16_0 ? 0 : this.getHolder().getId();
         pk.item = item;
         pk.slot = (byte) this.getHeldItemSlot();
         pk.selectedSlot = (byte) this.getHeldItemIndex();
@@ -130,7 +131,7 @@ public class PlayerInventory extends BaseInventory {
         for (Player player : players) {
             pk.eid = this.getHolder().getId();
             if (player.equals(this.getHolder())) {
-                pk.eid = player.getId();
+                pk.eid = player.protocol < ProtocolInfo.v0_16_0 ? 0 : player.getId();
                 this.sendSlot(this.getHeldItemSlot(), player);
             }
 
@@ -313,8 +314,7 @@ public class PlayerInventory extends BaseInventory {
         MobArmorEquipmentPacket pk = new MobArmorEquipmentPacket();
         pk.eid = this.getHolder().getId();
         pk.slots = armor;
-        pk.encode();
-        pk.isEncoded = true;
+        pk.tryEncode();
 
         for (Player player : players) {
             if (player.equals(this.getHolder())) {
@@ -363,8 +363,7 @@ public class PlayerInventory extends BaseInventory {
         MobArmorEquipmentPacket pk = new MobArmorEquipmentPacket();
         pk.eid = this.getHolder().getId();
         pk.slots = armor;
-        pk.encode();
-        pk.isEncoded = true;
+        pk.tryEncode();
 
         for (Player player : players) {
             if (player.equals(this.getHolder())) {

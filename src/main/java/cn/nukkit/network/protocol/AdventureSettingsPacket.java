@@ -38,6 +38,24 @@ public class AdventureSettingsPacket extends DataPacket {
 
     @Override
     public void decode() {
+        if (this.protocol < ProtocolInfo.v0_15_0) {
+            this.flags = this.getInt();
+            this.userPermission = this.getInt();
+            this.globalPermission = this.getInt();
+
+            this.worldImmutable = (this.flags & 0x01) != 0;
+            this.noPvp = false;
+            this.noPvm = false;
+            this.noMvp = false;
+            this.autoJump = (this.flags & 0x40) != 0;
+            this.allowFlight = (this.flags & 0x80) != 0;
+            this.noClip = (this.flags & 0x100) != 0;
+            this.worldBuilder = false;
+            this.isFlying = false;
+            this.muted = false;
+            return;
+        }
+
         if ((this.protocol < ProtocolInfo.v0_16_0)) {
             this.flags = this.getInt();
             this.userPermission = this.getInt();
@@ -63,6 +81,18 @@ public class AdventureSettingsPacket extends DataPacket {
     public void encode() {
         this.reset();
         this.flags = 0;
+        if (this.protocol < ProtocolInfo.v0_15_0) {
+            if (this.worldImmutable) this.flags |= 0x01;
+            if (this.autoJump) this.flags |= 0x40;
+            if (this.allowFlight) this.flags |= 0x80;
+            if (this.noClip) this.flags |= 0x100;
+
+            this.putInt(this.flags);
+            this.putInt(2);
+            this.putInt(2);
+            return;
+        }
+
         if (this.worldImmutable) this.flags |= 1;
         if (this.noPvp) this.flags |= 1 << 1;
         if (this.noPvm) this.flags |= 1 << 2;

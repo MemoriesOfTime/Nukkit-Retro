@@ -1,5 +1,13 @@
 package cn.nukkit.network.protocol;
 
+import org.intellij.lang.annotations.MagicConstant;
+import org.jetbrains.annotations.ApiStatus;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -10,30 +18,58 @@ import java.util.List;
  */
 public interface ProtocolInfo {
 
+    @ApiStatus.AvailableSince("0.14.0")
+    int v0_14_0 = 45;
+    @ApiStatus.AvailableSince("0.14.1")
+    int v0_14_1 = 46;
+    @ApiStatus.AvailableSince("0.14.2")
+    int v0_14_2 = 60;
+    @ApiStatus.AvailableSince("0.14.3")
+    int v0_14_3 = 70;
+    @ApiStatus.AvailableSince("0.15.0")
     int v0_15_0 = 81;
+    @ApiStatus.AvailableSince("0.15.4")
     int v0_15_4 = 82;
+    @ApiStatus.AvailableSince("0.15.9")
     int v0_15_9 = 83;
+    @ApiStatus.AvailableSince("0.15.10")
     int v0_15_10 = 84;
+    @ApiStatus.AvailableSince("0.16.0")
     int v0_16_0 = 91;
+    @ApiStatus.AvailableSince("1.0.0.0")
+    int v1_0_0_0 = 92;
+    @ApiStatus.AvailableSince("1.0.0")
     int v1_0_0 = 100;
+    @ApiStatus.AvailableSince("1.0.3")
     int v1_0_3 = 101;
+    @ApiStatus.AvailableSince("1.0.4")
     int v1_0_4 = 102;
+    @ApiStatus.AvailableSince("1.0.5")
     int v1_0_5 = 105;
+    @ApiStatus.AvailableSince("1.0.6")
     int v1_0_6 = 106;
+    @ApiStatus.AvailableSince("1.0.7")
     int v1_0_7 = 107;
+    @ApiStatus.AvailableSince("1.1.0")
     int v1_1_0 = 113;
 
     /**
      * 当前分支只维护 1.1.x 及以下，不引入 1.2+ 协议。
      */
+    @SupportedProtocol
     int CURRENT_PROTOCOL = v1_1_0;
 
     List<Integer> SUPPORTED_PROTOCOLS = Collections.unmodifiableList(Arrays.asList(
+            v0_14_0,
+            v0_14_1,
+            v0_14_2,
+            v0_14_3,
             v0_15_0,
             v0_15_4,
             v0_15_9,
             v0_15_10,
             v0_16_0,
+            v1_0_0_0,
             v1_0_0,
             v1_0_3,
             v1_0_4,
@@ -45,6 +81,58 @@ public interface ProtocolInfo {
 
     String MINECRAFT_VERSION_NETWORK = getMinecraftVersion(CURRENT_PROTOCOL);
     String MINECRAFT_VERSION = "v" + MINECRAFT_VERSION_NETWORK;
+
+    /**
+     * 标记当前分支明确支持的协议版本常量。
+     */
+    @Documented
+    @Retention(RetentionPolicy.SOURCE)
+    @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.LOCAL_VARIABLE, ElementType.METHOD})
+    @MagicConstant(intValues = {
+            v0_14_0,
+            v0_14_1,
+            v0_14_2,
+            v0_14_3,
+            v0_15_0,
+            v0_15_4,
+            v0_15_9,
+            v0_15_10,
+            v0_16_0,
+            v1_0_0_0,
+            v1_0_0,
+            v1_0_3,
+            v1_0_4,
+            v1_0_5,
+            v1_0_6,
+            v1_0_7,
+            v1_1_0
+    })
+    @interface SupportedProtocol {
+    }
+
+    /**
+     * 标记一个实现从哪个协议版本开始可用。
+     */
+    @Documented
+    @Retention(RetentionPolicy.SOURCE)
+    @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.CONSTRUCTOR})
+    @interface SinceProtocol {
+
+        @SupportedProtocol
+        int value();
+    }
+
+    /**
+     * 标记一个实现从哪个后续协议开始不可再用。
+     */
+    @Documented
+    @Retention(RetentionPolicy.SOURCE)
+    @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.CONSTRUCTOR})
+    @interface UnsupportedSince {
+
+        @SupportedProtocol
+        int value();
+    }
 
     byte LOGIN_PACKET = 0x01;
     byte PLAY_STATUS_PACKET = 0x02;
@@ -147,8 +235,14 @@ public interface ProtocolInfo {
         return protocol < v1_1_0;
     }
 
-    static int getPacketPoolProtocol(int protocol) {
+    @SupportedProtocol
+    static int getPacketPoolProtocol(@SupportedProtocol int protocol) {
         switch (protocol) {
+            case v0_14_0:
+            case v0_14_1:
+            case v0_14_2:
+            case v0_14_3:
+                return v0_14_2;
             case v0_15_0:
                 return v0_15_0;
             case v0_15_4:
@@ -157,6 +251,8 @@ public interface ProtocolInfo {
                 return v0_15_10;
             case v0_16_0:
                 return v0_16_0;
+            case v1_0_0_0:
+                return v1_0_0_0;
             case v1_0_0:
                 return v1_0_0;
             case v1_0_3:
@@ -173,8 +269,16 @@ public interface ProtocolInfo {
         }
     }
 
-    static String getMinecraftVersion(int protocol) {
+    static String getMinecraftVersion(@SupportedProtocol int protocol) {
         switch (protocol) {
+            case v0_14_0:
+                return "0.14.0";
+            case v0_14_1:
+                return "0.14.1";
+            case v0_14_2:
+                return "0.14.2";
+            case v0_14_3:
+                return "0.14.3";
             case v0_15_0:
                 return "0.15.0";
             case v0_15_4:
@@ -185,6 +289,8 @@ public interface ProtocolInfo {
                 return "0.15.10";
             case v0_16_0:
                 return "0.16.0";
+            case v1_0_0_0:
+                return "1.0.0.0";
             case v1_0_0:
                 return "1.0.0";
             case v1_0_3:

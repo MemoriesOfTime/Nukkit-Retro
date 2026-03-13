@@ -2,6 +2,7 @@ package cn.nukkit.network;
 
 import cn.nukkit.Server;
 import cn.nukkit.network.protocol.DataPacket;
+import cn.nukkit.network.protocol.ProtocolInfo.SupportedProtocol;
 
 import java.util.Arrays;
 import java.util.IdentityHashMap;
@@ -12,13 +13,14 @@ import java.util.Map;
  */
 public class PacketPool {
 
+    @SupportedProtocol
     private final int protocolVersion;
     private final String minecraftVersion;
     private final Class<? extends DataPacket>[] packetsById;
     private final Map<Class<? extends DataPacket>, Integer> packetsByClass;
 
     @SuppressWarnings("unchecked")
-    private PacketPool(int protocolVersion, String minecraftVersion, Class<? extends DataPacket>[] packetsById,
+    private PacketPool(@SupportedProtocol int protocolVersion, String minecraftVersion, Class<? extends DataPacket>[] packetsById,
                        Map<Class<? extends DataPacket>, Integer> packetsByClass) {
         this.protocolVersion = protocolVersion;
         this.minecraftVersion = minecraftVersion;
@@ -26,6 +28,7 @@ public class PacketPool {
         this.packetsByClass = packetsByClass;
     }
 
+    @SupportedProtocol
     public int getProtocolVersion() {
         return protocolVersion;
     }
@@ -80,7 +83,7 @@ public class PacketPool {
         private final Class<? extends DataPacket>[] packetsById = new Class[256];
         private final Map<Class<? extends DataPacket>, Integer> packetsByClass = new IdentityHashMap<>();
 
-        public Builder protocolVersion(int protocolVersion) {
+        public Builder protocolVersion(@SupportedProtocol int protocolVersion) {
             this.protocolVersion = protocolVersion;
             return this;
         }

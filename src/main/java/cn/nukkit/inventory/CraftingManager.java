@@ -146,8 +146,7 @@ public class CraftingManager {
             pk.addFurnaceRecipe(recipe);
         }
 
-        pk.encode();
-        pk.isEncoded = true;
+        pk.tryEncode();
 
         packet = pk;
     }

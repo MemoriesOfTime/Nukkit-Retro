@@ -682,8 +682,22 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     }
 
     public void sendChunk(int x, int z, byte[] payload) {
+        this.sendChunk(x, z, payload, FullChunkDataPacket.ORDER_COLUMNS);
+    }
+
+    public void sendChunk(int x, int z, byte[] payload, byte ordering) {
         if (!this.connected) {
             return;
+        }
+
+        byte chunkOrder = ordering;
+
+        if (this.protocol < ProtocolInfo.v0_16_0) {
+            byte[] legacyPayload = this.level.buildLegacyChunkPayload(x, z);
+            if (legacyPayload != null) {
+                payload = legacyPayload;
+                chunkOrder = FullChunkDataPacket.ORDER_LAYERED;
+            }
         }
 
         this.usedChunks.put(Level.chunkHash(x, z), true);
@@ -692,6 +706,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         FullChunkDataPacket pk = new FullChunkDataPacket();
         pk.chunkX = x;
         pk.chunkZ = z;
+        pk.order = chunkOrder;
         pk.data = payload;
 
         this.batchDataPacket(pk);
@@ -762,8 +777,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         this.sendPotionEffects(this);
         this.sendData(this);
-        this.inventory.sendContents(this);
-        this.inventory.sendArmorContents(this);
 
         SetTimePacket setTimePacket = new SetTimePacket();
         setTimePacket.time = this.level.getTime();
@@ -787,18 +800,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         playStatusPacket.status = PlayStatusPacket.PLAYER_SPAWN;
         this.dataPacket(playStatusPacket);
 
-        PlayerJoinEvent playerJoinEvent = new PlayerJoinEvent(this,
-                new TranslationContainer(TextFormat.YELLOW + "%multiplayer.player.joined", new String[]{
-                        this.getDisplayName()
-                })
-        );
-
-        this.server.getPluginManager().callEvent(playerJoinEvent);
-
-        if (playerJoinEvent.getJoinMessage().toString().trim().length() > 0) {
-            this.server.broadcastMessage(playerJoinEvent.getJoinMessage());
-        }
-
         this.noDamageTicks = 60;
 
         for (long index : this.usedChunks.keySet()) {
@@ -811,16 +812,42 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             }
         }
 
-        this.sendExperience(this.getExperience());
-        this.sendExperienceLevel(this.getExperienceLevel());
-
         this.teleport(pos, null); // Prevent PlayerTeleportEvent during player spawn
+
+        PlayerJoinEvent playerJoinEvent = new PlayerJoinEvent(this,
+                new TranslationContainer(TextFormat.YELLOW + "%multiplayer.player.joined", new String[]{
+                        this.getDisplayName()
+                })
+        );
+
+        this.server.getPluginManager().callEvent(playerJoinEvent);
+
+        if (playerJoinEvent.getJoinMessage().toString().trim().length() > 0) {
+            this.server.broadcastMessage(playerJoinEvent.getJoinMessage());
+        }
 
         if (!this.isSpectator()) {
             this.spawnToAll();
         }
 
         //todo Updater
+
+        //Weather
+        this.getLevel().sendWeather(this);
+
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.sendAttributes();
+
+            SetHealthPacket setHealthPacket = new SetHealthPacket();
+            setHealthPacket.health = (int) this.getHealth();
+            this.dataPacket(setHealthPacket);
+        }
+
+        this.sendExperience(this.getExperience());
+        this.sendExperienceLevel(this.getExperienceLevel());
+
+        //FoodLevel
+        this.getFoodData().sendFoodLevel();
 
         if (this.getHealth() <= 0) {
             respawnPacket = new RespawnPacket();
@@ -831,11 +858,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             this.dataPacket(respawnPacket);
         }
 
-        //Weather
-        this.getLevel().sendWeather(this);
-
-        //FoodLevel
-        this.getFoodData().sendFoodLevel();
+        this.inventory.sendContents(this);
+        this.inventory.sendArmorContents(this);
     }
 
     protected boolean orderChunks() {
@@ -1881,26 +1905,36 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             setSpawnPositionPacket.z = (int) spawnPosition.z;
             this.dataPacket(setSpawnPositionPacket);
 
+            SetHealthPacket setHealthPacket = new SetHealthPacket();
+            setHealthPacket.health = (int) this.getHealth();
+            this.dataPacket(setHealthPacket);
+
             SetDifficultyPacket setDifficultyPacket = new SetDifficultyPacket();
             setDifficultyPacket.difficulty = this.server.getDifficulty();
             this.dataPacket(setDifficultyPacket);
         }
 
         this.setMovementSpeed(DEFAULT_SPEED);
-        this.sendAttributes();
+        if (!(this.protocol < ProtocolInfo.v0_16_0)) {
+            this.sendAttributes();
+        }
         this.setNameTagVisible(true);
         this.setNameTagAlwaysVisible(true);
         this.setCanClimb(true);
+
+        String clientVersion = ProtocolInfo.getMinecraftVersion(this.protocol);
+        if (this.loginChainData != null) {
+            String gameVersion = this.loginChainData.getGameVersion();
+            if (gameVersion != null && !gameVersion.isEmpty()) {
+                clientVersion = gameVersion;
+            }
+        }
 
         this.server.getLogger().info(this.getServer().getLanguage().translateString("nukkit.player.logIn",
                 TextFormat.AQUA + this.username + TextFormat.WHITE,
                 this.ip,
                 String.valueOf(this.port),
-                String.valueOf(this.id),
-                this.level.getName(),
-                String.valueOf(NukkitMath.round(this.x, 4)),
-                String.valueOf(NukkitMath.round(this.y, 4)),
-                String.valueOf(NukkitMath.round(this.z, 4))));
+                this.protocol + " (" + clientVersion + ")"));
 
         if (this.isOp()) {
             this.setRemoveFormat(false);
@@ -1978,7 +2012,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     this.iusername = this.username.toLowerCase();
                     this.setDataProperty(new StringEntityData(DATA_NAMETAG, this.username), false);
 
-                    this.loginChainData = ClientChainData.read(loginPacket);
+                    this.loginChainData = this.protocol < ProtocolInfo.v0_16_0 ? null : ClientChainData.read(loginPacket);
 
                     if (this.server.getOnlinePlayers().size() >= this.server.getMaxPlayers() && this.kick(PlayerKickEvent.Reason.SERVER_FULL, "disconnectionScreen.serverFull", false)) {
                         break;
@@ -4308,7 +4342,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         if (this.spawned) {
             UpdateAttributesPacket pk = new UpdateAttributesPacket();
             pk.entries = new Attribute[]{attr};
-            pk.entityId = this.id;
+            pk.entityId = (this.protocol < ProtocolInfo.v0_16_0) ? 0 : this.id;
             this.dataPacket(pk);
         }
     }
@@ -4383,7 +4417,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     public void setAttribute(Attribute attribute) {
         UpdateAttributesPacket pk = new UpdateAttributesPacket();
         pk.entries = new Attribute[]{attribute};
-        pk.entityId = this.id;
+        pk.entityId = (this.protocol < ProtocolInfo.v0_16_0) ? 0 : this.id;
         this.dataPacket(pk);
     }
 
@@ -4907,20 +4941,29 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
 
     public static BatchPacket getChunkCacheFromData(int chunkX, int chunkZ, byte[] payload) {
+        return getChunkCacheFromData(chunkX, chunkZ, payload, FullChunkDataPacket.ORDER_COLUMNS, ProtocolInfo.CURRENT_PROTOCOL);
+    }
+
+    public static BatchPacket getChunkCacheFromData(int chunkX, int chunkZ, byte[] payload, byte ordering, int protocol) {
         FullChunkDataPacket pk = new FullChunkDataPacket();
+        pk.protocol = protocol;
         pk.chunkX = chunkX;
         pk.chunkZ = chunkZ;
+        pk.order = ordering;
         pk.data = payload;
-        pk.encode();
+        pk.tryEncode();
 
         BatchPacket batch = new BatchPacket();
+        batch.protocol = protocol;
         byte[][] batchPayload = new byte[2][];
         byte[] buf = pk.getBuffer();
-        batchPayload[0] = Binary.writeUnsignedVarInt(buf.length);
+        batchPayload[0] = ProtocolInfo.getPacketPoolProtocol(protocol) == ProtocolInfo.v0_14_2 ? Binary.writeInt(buf.length) : Binary.writeUnsignedVarInt(buf.length);
         batchPayload[1] = buf;
         byte[] data = Binary.appendBytes(batchPayload);
+        Server server = Server.getInstance();
+        int compressionLevel = server != null ? server.networkCompressionLevel : 7;
         try {
-            batch.payload = Zlib.deflate(data, Server.getInstance().networkCompressionLevel);
+            batch.payload = Zlib.deflate(data, compressionLevel);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

@@ -48,7 +48,7 @@ public class AddEntityPacket extends DataPacket {
             this.putFloat(this.speedX);
             this.putFloat(this.speedY);
             this.putFloat(this.speedZ);
-            if (this.protocol == ProtocolInfo.v0_15_0) {
+            if (this.protocol <= ProtocolInfo.v0_15_0) {
                 this.putFloat(this.yaw);
                 this.putFloat(this.pitch);
             } else {
@@ -56,7 +56,7 @@ public class AddEntityPacket extends DataPacket {
                 this.putFloat(this.pitch * 0.71f);
                 this.putInt(0);
             }
-            this.put(Binary.writeMetadata(this.metadata));
+            this.put(Binary.writeMetadata(this.protocol, this.metadata));
             this.putShort(this.links.length);
             for (Object[] link : this.links) {
                 this.putLong((long) link[0]);
@@ -78,7 +78,7 @@ public class AddEntityPacket extends DataPacket {
                 this.putLFloat(this.yaw);
                 this.putAttributeList(this.attributes);
             }
-            this.put(Binary.writeMetadata(this.metadata));
+            this.put(Binary.writeMetadata(this.protocol, this.metadata));
             this.putUnsignedVarInt(this.links.length);
             for (Object[] link : this.links) {
                 this.putVarLong((long) link[0]);

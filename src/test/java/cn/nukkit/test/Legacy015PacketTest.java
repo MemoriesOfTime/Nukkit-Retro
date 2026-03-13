@@ -20,6 +20,31 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class Legacy015PacketTest {
 
     @Test
+    @DisplayName("协议映射应与 Genisys 历史版本节点一致")
+    void protocolFamiliesShouldMatchGenisysHistory() {
+        assertAll(
+                () -> assertEquals(ProtocolInfo.v0_15_0, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v0_15_0)),
+                () -> assertEquals(ProtocolInfo.v0_15_10, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v0_15_4)),
+                () -> assertEquals(ProtocolInfo.v0_15_10, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v0_15_9)),
+                () -> assertEquals(ProtocolInfo.v0_15_10, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v0_15_10)),
+                () -> assertEquals(ProtocolInfo.v0_16_0, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v0_16_0)),
+                () -> assertEquals(ProtocolInfo.v1_0_0_0, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_0_0_0)),
+                () -> assertEquals(ProtocolInfo.v1_0_0, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_0_0)),
+                () -> assertEquals(ProtocolInfo.v1_0_3, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_0_3)),
+                () -> assertEquals(ProtocolInfo.v1_0_4, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_0_4)),
+                () -> assertEquals("0.15.0", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_15_0)),
+                () -> assertEquals("0.15.4", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_15_4)),
+                () -> assertEquals("0.15.9", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_15_9)),
+                () -> assertEquals("0.15.10", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_15_10)),
+                () -> assertEquals("0.16.0", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_16_0)),
+                () -> assertEquals("1.0.0.0", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_0_0_0)),
+                () -> assertEquals("1.0.0", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_0_0)),
+                () -> assertEquals("1.0.3", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_0_3)),
+                () -> assertEquals("1.0.4", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_0_4))
+        );
+    }
+
+    @Test
     @DisplayName("StartGame 应使用 0.15.x 旧布局")
     void startGameShouldUseClassic015Layout() {
         StartGamePacket packet = new StartGamePacket();

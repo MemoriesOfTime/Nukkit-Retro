@@ -5,6 +5,7 @@ import cn.nukkit.Server;
 import cn.nukkit.block.*;
 import cn.nukkit.blockentity.BlockEntity;
 import cn.nukkit.blockentity.BlockEntityChest;
+import cn.nukkit.blockentity.BlockEntitySpawnable;
 import cn.nukkit.entity.Entity;
 import cn.nukkit.entity.item.EntityItem;
 import cn.nukkit.entity.item.EntityXPOrb;
@@ -37,6 +38,7 @@ import cn.nukkit.level.particle.DestroyBlockParticle;
 import cn.nukkit.level.particle.Particle;
 import cn.nukkit.level.sound.BlockPlaceSound;
 import cn.nukkit.level.sound.Sound;
+import cn.nukkit.network.protocol.FullChunkDataPacket;
 import cn.nukkit.math.*;
 import cn.nukkit.math.BlockFace.Plane;
 import cn.nukkit.metadata.BlockMetadataStore;
@@ -110,7 +112,8 @@ public class Level implements ChunkManager, Metadatable {
             .build().asMap();
 
     // Use a weak map to avoid OOM
-    private final ConcurrentMap<Object, Object> chunkCache = CacheBuilder.newBuilder()
+    @SuppressWarnings("unchecked")
+    private final ConcurrentMap<Long, ChunkPayload> chunkCache = (ConcurrentMap<Long, ChunkPayload>) (ConcurrentMap<?, ?>) CacheBuilder.newBuilder()
             .maximumSize(1000)
             .expireAfterWrite(10, TimeUnit.MINUTES)
             .build().asMap();
@@ -2461,9 +2464,10 @@ public class Level implements ChunkManager, Metadatable {
     private void sendChunkFromCache(int x, int z) {
         Long index = Level.chunkHash(x, z);
         if (this.chunkSendTasks.containsKey(index)) {
+            ChunkPayload cachedChunk = this.chunkCache.get(index);
             for (Player player : this.chunkSendQueue.get(index).values()) {
-                if (player.isConnected() && player.usedChunks.containsKey(index)) {
-                    player.sendChunk(x, z, (DataPacket) this.chunkCache.get(index));
+                if (cachedChunk != null && player.isConnected() && player.usedChunks.containsKey(index)) {
+                    player.sendChunk(x, z, cachedChunk.payload, cachedChunk.ordering);
                 }
             }
 
@@ -2498,11 +2502,15 @@ public class Level implements ChunkManager, Metadatable {
     }
 
     public void chunkRequestCallback(int x, int z, byte[] payload) {
+        this.chunkRequestCallback(x, z, payload, FullChunkDataPacket.ORDER_COLUMNS);
+    }
+
+    public void chunkRequestCallback(int x, int z, byte[] payload, byte ordering) {
         this.timings.syncChunkSendTimer.startTiming();
         Long index = Level.chunkHash(x, z);
 
         if (this.cacheChunks && !this.chunkCache.containsKey(index)) {
-            this.chunkCache.put(index, Player.getChunkCacheFromData(x, z, payload));
+            this.chunkCache.put(index, new ChunkPayload(payload, ordering));
             this.sendChunkFromCache(x, z);
             this.timings.syncChunkSendTimer.stopTiming();
             return;
@@ -2511,7 +2519,7 @@ public class Level implements ChunkManager, Metadatable {
         if (this.chunkSendTasks.containsKey(index)) {
             for (Player player : this.chunkSendQueue.get(index).values()) {
                 if (player.isConnected() && player.usedChunks.containsKey(index)) {
-                    player.sendChunk(x, z, payload);
+                    player.sendChunk(x, z, payload, ordering);
                 }
             }
 
@@ -2730,7 +2738,7 @@ public class Level implements ChunkManager, Metadatable {
 
         if (spawn != null) {
             Vector3 v = spawn.floor();
-            FullChunk chunk = this.getChunk((int) v.x >> 4, (int) v.z >> 4, false);
+            FullChunk chunk = this.getChunk((int) v.x >> 4, (int) v.z >> 4, true);
             int x = (int) v.x & 0x0f;
             int z = (int) v.z & 0x0f;
             if (chunk != null) {
@@ -3219,5 +3227,92 @@ public class Level implements ChunkManager, Metadatable {
 
     public int getSpawnRadius() {
         return getGameRules().getInt("spawnRadius");
+    }
+
+    /**
+     * 为 0.14/0.15 旧版客户端构建 Anvil 区块的 ORDER_LAYERED 格式数据。
+     * 将子区块数组按 section 顺序拼接（与 PHP Genisys Anvil 行为一致）。
+     * 仅对 section-based 区块（Anvil）生效，McRegion/LevelDB 返回 null。
+     */
+    public byte[] buildLegacyChunkPayload(int x, int z) {
+        FullChunk fullChunk = this.getChunk(x, z, true);
+        if (fullChunk == null || !(fullChunk instanceof Chunk)) {
+            return null;
+        }
+
+        Chunk chunk = (Chunk) fullChunk;
+        ChunkSection[] sections = chunk.getSections();
+        int sectionCount = 8; // 128 高度，旧版客户端仅支持 8 个子区块
+
+        BinaryStream stream = new BinaryStream();
+
+        // Block IDs: 8 sections × 4096 bytes (YZX order within each section)
+        for (int i = 0; i < sectionCount; i++) {
+            stream.put(sections[i].getIdArray());
+        }
+
+        // Block data: 8 sections × 2048 bytes
+        for (int i = 0; i < sectionCount; i++) {
+            stream.put(sections[i].getDataArray());
+        }
+
+        // Sky light: 8 sections × 2048 bytes（使用实际 section 数据，与 PHP Genisys 一致）
+        for (int i = 0; i < sectionCount; i++) {
+            stream.put(sections[i].getSkyLightArray());
+        }
+
+        // Block light: 8 sections × 2048 bytes
+        for (int i = 0; i < sectionCount; i++) {
+            stream.put(sections[i].getLightArray());
+        }
+
+        // Height map: 256 bytes
+        for (int height : fullChunk.getHeightMapArray()) {
+            stream.putByte((byte) height);
+        }
+
+        // Biome colors: 256 × 4 bytes (big-endian)
+        for (int color : fullChunk.getBiomeColorArray()) {
+            stream.put(Binary.writeInt(color));
+        }
+
+        // Extra data
+        Map<Integer, Integer> extra = fullChunk.getBlockExtraDataArray();
+        if (!extra.isEmpty()) {
+            stream.putLInt(extra.size());
+            for (Map.Entry<Integer, Integer> entry : extra.entrySet()) {
+                stream.putLInt(entry.getKey());
+                stream.putLShort(entry.getValue());
+            }
+        } else {
+            stream.putLInt(0);
+        }
+
+        // Block entities NBT
+        if (!fullChunk.getBlockEntities().isEmpty()) {
+            List<CompoundTag> tagList = new ArrayList<>();
+            for (BlockEntity blockEntity : fullChunk.getBlockEntities().values()) {
+                if (blockEntity instanceof BlockEntitySpawnable) {
+                    tagList.add(((BlockEntitySpawnable) blockEntity).getSpawnCompound());
+                }
+            }
+            try {
+                stream.put(NBTIO.write(tagList, java.nio.ByteOrder.LITTLE_ENDIAN));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        return stream.getBuffer();
+    }
+
+    private static final class ChunkPayload {
+        private final byte[] payload;
+        private final byte ordering;
+
+        private ChunkPayload(byte[] payload, byte ordering) {
+            this.payload = payload;
+            this.ordering = ordering;
+        }
     }
 }

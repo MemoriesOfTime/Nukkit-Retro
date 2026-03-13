@@ -65,6 +65,6 @@ public class AddPlayerPacket extends DataPacket {
         }
         this.putSlot(this.item);
 
-        this.put(Binary.writeMetadata(this.metadata));
+        this.put(Binary.writeMetadata(this.protocol, this.metadata));
     }
 }

@@ -55,7 +55,9 @@ public class UseItemPacket extends DataPacket {
             this.x = v.x;
             this.y = v.y;
             this.z = v.z;
-            this.interactBlockId = (int) this.getUnsignedVarInt();
+            if (this.protocol >= ProtocolInfo.v1_0_0) {
+                this.interactBlockId = (int) this.getUnsignedVarInt();
+            }
             this.face = this.getVarInt();
             Vector3f faceVector3 = this.getVector3f();
             this.fx = faceVector3.x;

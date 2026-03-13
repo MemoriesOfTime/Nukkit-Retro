@@ -1,6 +1,7 @@
 package cn.nukkit.network.protocol;
 
 import cn.nukkit.entity.data.Skin;
+import cn.nukkit.utils.Binary;
 import cn.nukkit.utils.Zlib;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -25,6 +26,8 @@ public class LoginPacket extends DataPacket {
     public byte gameEdition;
     public UUID clientUUID;
     public long clientId;
+    public String serverAddress;
+    public String clientSecret;
 
     public Skin skin;
 
@@ -35,6 +38,18 @@ public class LoginPacket extends DataPacket {
 
     @Override
     public void decode() {
+        if (ProtocolInfo.getPacketPoolProtocol(this.protocol) == ProtocolInfo.v0_14_2) {
+            this.username = this.getLegacyString();
+            this.clientProtocol = this.getInt();
+            this.getInt(); // secondary protocol field, kept for compatibility with old login payload
+            this.clientId = this.getLong();
+            this.clientUUID = this.getUUID();
+            this.serverAddress = this.getLegacyString();
+            this.clientSecret = this.getLegacyString();
+            this.skin = this.decodeLegacySkin();
+            return;
+        }
+
         this.clientProtocol = this.getInt();
         if ((this.clientProtocol < ProtocolInfo.v0_16_0)) {
             byte[] str;
@@ -93,13 +108,54 @@ public class LoginPacket extends DataPacket {
         String skinId = null;
         if (skinToken.has("ClientRandomId")) this.clientId = skinToken.get("ClientRandomId").getAsLong();
         if (skinToken.has("SkinId")) skinId = skinToken.get("SkinId").getAsString();
-        if (skinToken.has("SkinData")) this.skin = new Skin(skinToken.get("SkinData").getAsString(), skinId);
+        if (skinToken.has("SkinData")) this.skin = this.decodeSkinOrDefault(skinToken.get("SkinData").getAsString(), skinId);
     }
 
     private JsonObject decodeToken(String token) {
         String[] base = token.split("\\.");
         if (base.length < 2) return null;
         return new Gson().fromJson(new String(Base64.getDecoder().decode(base[1]), StandardCharsets.UTF_8), JsonObject.class);
+    }
+
+    private Skin decodeLegacySkin() {
+        String skinModel = this.getLegacyString();
+        int remaining = Math.max(0, this.getCount() - this.getOffset());
+
+        if (remaining == Skin.SINGLE_SKIN_SIZE || remaining == Skin.DOUBLE_SKIN_SIZE) {
+            return this.decodeSkinOrDefault(this.get(remaining), skinModel);
+        }
+
+        if (remaining >= 4) {
+            int intLength = Binary.readInt(Binary.subBytes(this.getBuffer(), this.getOffset(), 4));
+            if ((intLength == Skin.SINGLE_SKIN_SIZE || intLength == Skin.DOUBLE_SKIN_SIZE) && intLength <= remaining - 4) {
+                this.setOffset(this.getOffset() + 4);
+                return this.decodeSkinOrDefault(this.get(intLength), skinModel);
+            }
+        }
+
+        int skinLength = remaining >= 2 ? this.getShort() & 0xffff : 0;
+        int readable = Math.max(0, this.getCount() - this.getOffset());
+        return this.decodeSkinOrDefault(this.get(Math.min(skinLength, readable)), skinModel);
+    }
+
+    private String getLegacyString() {
+        return new String(this.get(this.getShort() & 0xffff), StandardCharsets.UTF_8);
+    }
+
+    private Skin decodeSkinOrDefault(String base64Skin, String skinModel) {
+        try {
+            return new Skin(base64Skin, skinModel);
+        } catch (IllegalArgumentException e) {
+            return this.decodeSkinOrDefault(new byte[Skin.SINGLE_SKIN_SIZE], skinModel);
+        }
+    }
+
+    private Skin decodeSkinOrDefault(byte[] skinData, String skinModel) {
+        try {
+            return new Skin(skinData, skinModel);
+        } catch (IllegalArgumentException e) {
+            return new Skin(new byte[Skin.SINGLE_SKIN_SIZE], skinModel);
+        }
     }
 
     @Override

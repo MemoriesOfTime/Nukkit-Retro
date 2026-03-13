@@ -23,21 +23,22 @@ Introduction
 
 Nukkit-Retro is a Nukkit fork based on the old NK codebase, maintained for legacy Minecraft: Pocket Edition support.
 
-This branch is focused on compatibility for `1.1.x` and below:
+This branch is focused on compatibility for legacy clients from `0.14.x` up to `1.1.x`:
 
 * Based on the old Nukkit / NK implementation, keeping the historical behavior and plugin ecosystem as much as possible
-* Focused on multi-version compatibility for `1.1.x` and earlier legacy clients
+* Focused on multi-version compatibility for legacy clients from `0.14.x` to `1.1.x`
 * Does **not** target `1.2+` protocol support in this branch
 
 Status
 -------------
 
-This project currently targets the legacy protocol range below:
+This project currently targets the legacy protocol / version range below:
 
-* `0.15.x`
+* `0.14.0` - `0.14.3`
+* `0.15.0` - `0.15.10`
 * `0.16.0`
-* `1.0.x`
-* `1.1.x`
+* `1.0.0.0` - `1.0.9`
+* `1.1.0` - `1.1.3`
 
 If you need modern Bedrock support, this repository is not intended for that use case.
 
@@ -63,7 +64,7 @@ Nukkit-Retro keeps the original Nukkit package structure and targets legacy plug
 
 Contributing
 ------------
-Contributions related to legacy compatibility, regression fixes, and `1.1.x` and below protocol support are welcome.
+Contributions related to legacy compatibility, regression fixes, and `0.14.x` to `1.1.x` protocol support are welcome.
 
 Discussion
 -------------

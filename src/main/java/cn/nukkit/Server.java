@@ -53,6 +53,7 @@ import cn.nukkit.network.protocol.BatchPacket;
 import cn.nukkit.network.protocol.DataPacket;
 import cn.nukkit.network.protocol.PlayerListPacket;
 import cn.nukkit.network.protocol.ProtocolInfo;
+import cn.nukkit.network.protocol.ProtocolInfo.SupportedProtocol;
 import cn.nukkit.network.query.QueryHandler;
 import cn.nukkit.network.rcon.RCON;
 import cn.nukkit.permission.BanEntry;
@@ -585,7 +586,7 @@ public class Server {
         Timings.playerNetworkSendTimer.stopTiming();
     }
 
-    private byte[] encodeBatchPackets(int protocol, DataPacket[] packets) {
+    private byte[] encodeBatchPackets(@SupportedProtocol int protocol, DataPacket[] packets) {
         byte[][] payload = new byte[packets.length * 2][];
         for (int i = 0; i < packets.length; i++) {
             DataPacket p = packets[i].clone();
@@ -596,11 +597,10 @@ public class Server {
             p.isEncoded = false;
             p.setBuffer(null);
             p.setOffset(0);
-            p.encode();
-            p.isEncoded = true;
+            p.tryEncode();
 
             byte[] buf = p.getBuffer();
-            payload[i * 2] = Binary.writeUnsignedVarInt(buf.length);
+            payload[i * 2] = ProtocolInfo.getPacketPoolProtocol(protocol) == ProtocolInfo.v0_14_2 ? Binary.writeInt(buf.length) : Binary.writeUnsignedVarInt(buf.length);
             payload[i * 2 + 1] = buf;
         }
         return Binary.appendBytes(payload);

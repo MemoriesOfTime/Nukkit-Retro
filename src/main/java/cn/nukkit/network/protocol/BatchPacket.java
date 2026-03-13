@@ -16,11 +16,19 @@ public class BatchPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.payload = this.get();
+        if (ProtocolInfo.getPacketPoolProtocol(this.protocol) == ProtocolInfo.v0_14_2) {
+            this.payload = this.get(this.getInt());
+        } else {
+            this.payload = this.get();
+        }
     }
 
     @Override
     public void encode() {
-
+        if (ProtocolInfo.getPacketPoolProtocol(this.protocol) == ProtocolInfo.v0_14_2) {
+            this.reset();
+            this.putInt(this.payload.length);
+            this.put(this.payload);
+        }
     }
 }

@@ -8,6 +8,9 @@ import cn.nukkit.event.server.QueryRegenerateEvent;
 import cn.nukkit.network.protocol.BatchPacket;
 import cn.nukkit.network.protocol.DataPacket;
 import cn.nukkit.network.protocol.ProtocolInfo;
+import cn.nukkit.network.protocol.ProtocolInfo.SupportedProtocol;
+import cn.nukkit.network.protocol.ProtocolInfo.SinceProtocol;
+import cn.nukkit.network.protocol.ProtocolInfo.UnsupportedSince;
 import cn.nukkit.raknet.RakNet;
 import cn.nukkit.raknet.protocol.EncapsulatedPacket;
 import cn.nukkit.raknet.protocol.packet.PING_DataPacket;
@@ -18,6 +21,7 @@ import cn.nukkit.utils.Binary;
 import cn.nukkit.utils.MainLogger;
 import cn.nukkit.utils.Utils;
 import cn.nukkit.utils.Zlib;
+import org.jetbrains.annotations.ApiStatus;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -139,6 +143,7 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
     @Override
     public void handleEncapsulated(String identifier, EncapsulatedPacket packet, int flags) {
         if (this.players.containsKey(identifier)) {
+            Player player = this.players.get(identifier);
             DataPacket pk = null;
             try {
                 if (packet.buffer.length > 0) {
@@ -151,10 +156,10 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
                         return;
                     }
 
-                    pk = this.getPacket(packet.buffer);
+                    pk = this.getPacket(player, packet.buffer);
                     if (pk != null) {
                         pk.decode();
-                        this.players.get(identifier).handleDataPacket(pk);
+                        player.handleDataPacket(pk);
                     }
                 }
             } catch (Exception e) {
@@ -243,6 +248,10 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
 
     @Override
     public Integer putPacket(Player player, DataPacket packet, boolean needACK, boolean immediate) {
+        if (ProtocolInfo.getPacketPoolProtocol(player.protocol) == ProtocolInfo.v0_14_2) {
+            return this.putLegacy014Packet(player, packet, needACK, immediate);
+        }
+
         if (this.identifiers.containsKey(player.rawHashCode())) {
             byte[] buffer;
             if (packet.pid() == ProtocolInfo.BATCH_PACKET) {
@@ -251,10 +260,7 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
                 this.server.batchPackets(new Player[]{player}, new DataPacket[]{packet}, true);
                 return null;
             } else {
-                if (!packet.isEncoded) {
-                    packet.encode();
-                    packet.isEncoded = true;
-                }
+                packet.tryEncode();
                 buffer = packet.getBuffer();
                 try {
                     buffer = Zlib.deflate(
@@ -309,20 +315,89 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
         return null;
     }
 
-    private DataPacket getPacket(byte[] buffer) {
-        int start = 0;
-
-        if (buffer[0] == (byte) 0xfe) {
-            start++;
-        }
-        DataPacket data = this.network.getPacket(ProtocolInfo.BATCH_PACKET);
-
-        if (data == null) {
+    @ApiStatus.AvailableSince("0.14.0")
+    @SinceProtocol(ProtocolInfo.v0_14_0)
+    @UnsupportedSince(ProtocolInfo.v0_15_0)
+    private Integer putLegacy014Packet(Player player, DataPacket packet, boolean needACK, boolean immediate) {
+        if (!this.identifiers.containsKey(player.rawHashCode())) {
             return null;
         }
 
-        data.setBuffer(buffer, start);
+        packet.tryEncode();
 
-        return data;
+        byte[] buffer = packet.getBuffer();
+        String identifier = this.identifiers.get(player.rawHashCode());
+        EncapsulatedPacket pk = null;
+
+        if (!immediate && !needACK && packet.pid() != ProtocolInfo.BATCH_PACKET && buffer != null && buffer.length >= 512) {
+            this.server.batchPackets(new Player[]{player}, new DataPacket[]{packet}, true);
+            return null;
+        }
+
+        if (!needACK) {
+            if (packet.encapsulatedPacket == null) {
+                packet.encapsulatedPacket = new CacheEncapsulatedPacket();
+                packet.encapsulatedPacket.identifierACK = null;
+                packet.encapsulatedPacket.buffer = Binary.appendBytes((byte) 0x8e, buffer);
+                if (packet.getChannel() != 0) {
+                    packet.encapsulatedPacket.reliability = 3;
+                    packet.encapsulatedPacket.orderChannel = packet.getChannel();
+                    packet.encapsulatedPacket.orderIndex = 0;
+                } else {
+                    packet.encapsulatedPacket.reliability = 2;
+                }
+            }
+            pk = packet.encapsulatedPacket;
+        }
+
+        if (pk == null) {
+            pk = new EncapsulatedPacket();
+            pk.buffer = Binary.appendBytes((byte) 0x8e, buffer);
+            if (packet.getChannel() != 0) {
+                packet.reliability = 3;
+                packet.orderChannel = packet.getChannel();
+                packet.orderIndex = 0;
+            } else {
+                packet.reliability = 2;
+            }
+
+            if (needACK) {
+                int iACK = this.identifiersACK.get(identifier);
+                iACK++;
+                pk.identifierACK = iACK;
+                this.identifiersACK.put(identifier, iACK);
+            }
+        }
+
+        this.handler.sendEncapsulated(identifier, pk, (needACK ? RakNet.FLAG_NEED_ACK : 0) | (immediate ? RakNet.PRIORITY_IMMEDIATE : RakNet.PRIORITY_NORMAL));
+        return pk.identifierACK;
+    }
+
+    private DataPacket getPacket(Player player, byte[] buffer) {
+        if (buffer.length == 0) {
+            return null;
+        }
+
+        if (buffer[0] == (byte) 0xfe) {
+            DataPacket data = this.network.getPacket(ProtocolInfo.BATCH_PACKET);
+            if (data == null) {
+                return null;
+            }
+            data.setBuffer(buffer, 1);
+            return data;
+        }
+
+        if (buffer.length >= 2 && buffer[0] == (byte) 0x8e) {
+            @SupportedProtocol int protocol = ProtocolInfo.getPacketPoolProtocol(player.protocol) == ProtocolInfo.v0_14_2 ? player.protocol : ProtocolInfo.v0_14_2;
+            DataPacket data = this.network.getPacket(buffer[1] & 0xff, protocol);
+            if (data == null) {
+                return null;
+            }
+            data.protocol = protocol;
+            data.setBuffer(buffer, 2);
+            return data;
+        }
+
+        return null;
     }
 }

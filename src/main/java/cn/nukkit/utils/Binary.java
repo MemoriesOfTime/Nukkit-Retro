@@ -1,10 +1,12 @@
 package cn.nukkit.utils;
 
 import cn.nukkit.entity.Entity;
+import cn.nukkit.entity.EntityHuman;
 import cn.nukkit.entity.data.*;
 import cn.nukkit.item.Item;
 import cn.nukkit.math.BlockVector3;
 import cn.nukkit.math.NukkitMath;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -72,6 +74,14 @@ public class Binary {
     }
 
     public static byte[] writeMetadata(EntityMetadata metadata) {
+        return writeMetadata(Integer.MAX_VALUE, metadata);
+    }
+
+    public static byte[] writeMetadata(int protocol, EntityMetadata metadata) {
+        if (protocol < ProtocolInfo.v0_15_0) {
+            return writeLegacyMetadata(metadata);
+        }
+
         BinaryStream stream = new BinaryStream();
         Map<Integer, EntityData> map = metadata.getMap();
         stream.putUnsignedVarInt(map.size());
@@ -121,6 +131,110 @@ public class Binary {
             }
         }
         return stream.getBuffer();
+    }
+
+    private static byte[] writeLegacyMetadata(EntityMetadata metadata) {
+        BinaryStream stream = new BinaryStream();
+        Map<Integer, EntityData> map = metadata.getMap();
+
+        long flags = getLongMetadata(map, Entity.DATA_FLAGS, 0);
+        putLegacyMetadataByte(stream, 0, (int) (flags & 0xff));
+        putLegacyMetadataShort(stream, 1, getIntMetadata(map, Entity.DATA_AIR, 300));
+        putLegacyMetadataString(stream, 2, getStringMetadata(map, Entity.DATA_NAMETAG, ""));
+        putLegacyMetadataByte(stream, 3, hasFlag(flags, Entity.DATA_FLAG_CAN_SHOW_NAMETAG) || hasFlag(flags, Entity.DATA_FLAG_ALWAYS_SHOW_NAMETAG) ? 1 : 0);
+        putLegacyMetadataByte(stream, 4, hasFlag(flags, Entity.DATA_FLAG_SILENT) ? 1 : 0);
+
+        if (map.containsKey(Entity.DATA_POTION_COLOR)) {
+            putLegacyMetadataInt(stream, 7, getIntMetadata(map, Entity.DATA_POTION_COLOR, 0));
+        }
+        if (map.containsKey(Entity.DATA_POTION_AMBIENT)) {
+            putLegacyMetadataByte(stream, 8, getIntMetadata(map, Entity.DATA_POTION_AMBIENT, 0));
+        }
+
+        putLegacyMetadataByte(stream, 15, hasFlag(flags, Entity.DATA_FLAG_NO_AI) ? 1 : 0);
+
+        if (map.containsKey(EntityHuman.DATA_PLAYER_FLAGS)) {
+            putLegacyMetadataByte(stream, 16, getIntMetadata(map, EntityHuman.DATA_PLAYER_FLAGS, 0));
+        }
+        if (map.get(EntityHuman.DATA_PLAYER_BED_POSITION) instanceof IntPositionEntityData) {
+            IntPositionEntityData pos = (IntPositionEntityData) map.get(EntityHuman.DATA_PLAYER_BED_POSITION);
+            putLegacyMetadataPos(stream, 17, pos.x, pos.y, pos.z);
+        }
+
+        stream.putByte((byte) 0x7f);
+        return stream.getBuffer();
+    }
+
+    private static boolean hasFlag(long flags, int flag) {
+        return (flags & (1L << flag)) != 0;
+    }
+
+    private static long getLongMetadata(Map<Integer, EntityData> map, int id, long defaultValue) {
+        EntityData data = map.get(id);
+        if (data instanceof LongEntityData) {
+            return ((LongEntityData) data).getData();
+        }
+        if (data instanceof IntEntityData) {
+            return ((IntEntityData) data).getData();
+        }
+        if (data instanceof ByteEntityData) {
+            return ((ByteEntityData) data).getData();
+        }
+        return defaultValue;
+    }
+
+    private static int getIntMetadata(Map<Integer, EntityData> map, int id, int defaultValue) {
+        EntityData data = map.get(id);
+        if (data instanceof IntEntityData) {
+            return ((IntEntityData) data).getData();
+        }
+        if (data instanceof ShortEntityData) {
+            return ((ShortEntityData) data).getData();
+        }
+        if (data instanceof ByteEntityData) {
+            return ((ByteEntityData) data).getData();
+        }
+        if (data instanceof LongEntityData) {
+            return ((LongEntityData) data).getData().intValue();
+        }
+        return defaultValue;
+    }
+
+    private static String getStringMetadata(Map<Integer, EntityData> map, int id, String defaultValue) {
+        EntityData data = map.get(id);
+        if (data instanceof StringEntityData) {
+            return ((StringEntityData) data).getData();
+        }
+        return defaultValue;
+    }
+
+    private static void putLegacyMetadataByte(BinaryStream stream, int id, int value) {
+        stream.putByte((byte) (id & 0x1f));
+        stream.putByte((byte) value);
+    }
+
+    private static void putLegacyMetadataShort(BinaryStream stream, int id, int value) {
+        stream.putByte((byte) ((1 << 5) | (id & 0x1f)));
+        stream.putLShort(value);
+    }
+
+    private static void putLegacyMetadataInt(BinaryStream stream, int id, int value) {
+        stream.putByte((byte) ((2 << 5) | (id & 0x1f)));
+        stream.putLInt(value);
+    }
+
+    private static void putLegacyMetadataString(BinaryStream stream, int id, String value) {
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        stream.putByte((byte) ((4 << 5) | (id & 0x1f)));
+        stream.putLShort(bytes.length);
+        stream.put(bytes);
+    }
+
+    private static void putLegacyMetadataPos(BinaryStream stream, int id, int x, int y, int z) {
+        stream.putByte((byte) ((6 << 5) | (id & 0x1f)));
+        stream.putLInt(x);
+        stream.putLInt(y);
+        stream.putLInt(z);
     }
 
     public static EntityMetadata readMetadata(byte[] payload) {

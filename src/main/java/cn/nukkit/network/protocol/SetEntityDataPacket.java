@@ -31,6 +31,6 @@ public class SetEntityDataPacket extends DataPacket {
         } else {
             this.putVarLong(this.eid);
         }
-        this.put(Binary.writeMetadata(this.metadata));
+        this.put(Binary.writeMetadata(this.protocol, this.metadata));
     }
 }

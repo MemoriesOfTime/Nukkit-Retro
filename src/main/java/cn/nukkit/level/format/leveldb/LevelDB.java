@@ -184,9 +184,9 @@ public class LevelDB implements LevelProvider {
         if (!extra.isEmpty()) {
             extraData = new BinaryStream();
             extraData.putLInt(extra.size());
-            for (Integer key : extra.values()) {
-                extraData.putLInt(key);
-                extraData.putLShort(extra.get(key));
+            for (Map.Entry<Integer, Integer> entry : extra.entrySet()) {
+                extraData.putLInt(entry.getKey());
+                extraData.putLShort(entry.getValue());
             }
         } else {
             extraData = null;
