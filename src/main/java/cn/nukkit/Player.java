@@ -1504,6 +1504,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         UpdateAttributesPacket pk = new UpdateAttributesPacket();
         pk.entityId = (this.protocol < ProtocolInfo.v0_16_0) ? 0 : this.getId();
         if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            // 0.15.x客户端不使用属性系统来显示饥饿值和经验，仅发送基本属性
             pk.entries = new Attribute[]{
                     Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue(this.getMaxHealth()).setValue(health > 0 ? (health < getMaxHealth() ? health : getMaxHealth()) : 0),
                     Attribute.getAttribute(Attribute.MOVEMENT_SPEED).setValue(this.getMovementSpeed())
@@ -3939,6 +3940,10 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     }
 
     public void sendTip(String message) {
+        if (this.protocol >= ProtocolInfo.v0_14_2 && this.protocol < ProtocolInfo.v0_15_0) {
+            this.sendPopup(message);
+            return;
+        }
         TextPacket pk = new TextPacket();
         pk.type = TextPacket.TYPE_TIP;
         pk.message = message;

@@ -37,7 +37,7 @@ public class UpdateBlockPacket extends DataPacket {
     public void encode() {
         this.reset();
         if ((this.protocol < ProtocolInfo.v0_16_0)) {
-            if (this.protocol == ProtocolInfo.v0_15_0) {
+            if (this.protocol < ProtocolInfo.v0_15_0) {
                 this.putInt(1);
             }
             this.putInt(this.x);

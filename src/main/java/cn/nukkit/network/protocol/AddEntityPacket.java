@@ -48,12 +48,13 @@ public class AddEntityPacket extends DataPacket {
             this.putFloat(this.speedX);
             this.putFloat(this.speedY);
             this.putFloat(this.speedZ);
-            if (this.protocol <= ProtocolInfo.v0_15_0) {
+            if (this.protocol < ProtocolInfo.v0_15_4) {
                 this.putFloat(this.yaw);
                 this.putFloat(this.pitch);
             } else {
-                this.putFloat(this.yaw * 0.71f);
-                this.putFloat(this.pitch * 0.71f);
+                // 0.15.4-0.15.10使用角度转换
+                this.putFloat(this.yaw * 0.71111f);
+                this.putFloat(this.pitch * 0.71111f);
                 this.putInt(0);
             }
             this.put(Binary.writeMetadata(this.protocol, this.metadata));
@@ -70,6 +71,7 @@ public class AddEntityPacket extends DataPacket {
             this.putVector3f(this.x, this.y, this.z);
             this.putVector3f(this.speedX, this.speedY, this.speedZ);
             if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+                // 0.16.0-1.0.x使用256度角度系统
                 this.putLFloat(this.pitch * (256f / 360f));
                 this.putLFloat(this.yaw * (256f / 360f));
                 this.putUnsignedVarInt(0);

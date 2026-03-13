@@ -1,5 +1,6 @@
 package cn.nukkit.network.protocol;
 
+import cn.nukkit.Server;
 import cn.nukkit.entity.data.Skin;
 import cn.nukkit.utils.Binary;
 import cn.nukkit.utils.Zlib;
@@ -56,6 +57,7 @@ public class LoginPacket extends DataPacket {
             try {
                 str = Zlib.inflate(this.get(this.getInt()), 64 * 1024 * 1024);
             } catch (Exception e) {
+                Server.getInstance().getLogger().error("Failed to decompress login data for protocol " + this.clientProtocol, e);
                 return;
             }
             this.setBuffer(str, 0);
@@ -66,6 +68,7 @@ public class LoginPacket extends DataPacket {
                 try {
                     str = Zlib.inflate(this.get((int) this.getUnsignedVarInt()), 64 * 1024 * 1024);
                 } catch (Exception e) {
+                    Server.getInstance().getLogger().error("Failed to decompress login data for legacy protocol " + this.clientProtocol, e);
                     return;
                 }
                 this.setBuffer(str, 0);

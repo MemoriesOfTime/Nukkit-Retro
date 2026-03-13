@@ -21,7 +21,16 @@ public class FullChunkDataPacket extends DataPacket {
 
     @Override
     public void decode() {
-
+        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+            this.chunkX = this.getInt();
+            this.chunkZ = this.getInt();
+            this.order = (byte) this.getByte();
+            this.data = this.get(this.getInt());
+        } else {
+            this.chunkX = this.getVarInt();
+            this.chunkZ = this.getVarInt();
+            this.data = this.getByteArray();
+        }
     }
 
     @Override

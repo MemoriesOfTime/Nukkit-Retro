@@ -50,6 +50,8 @@ public interface ProtocolInfo {
     int v1_0_6 = 106;
     @ApiStatus.AvailableSince("1.0.7")
     int v1_0_7 = 107;
+    @ApiStatus.AvailableSince("1.0.9")
+    int v1_0_9 = v1_0_7; // Alias, same protocol number
     @ApiStatus.AvailableSince("1.1.0")
     int v1_1_0 = 113;
 
@@ -235,6 +237,14 @@ public interface ProtocolInfo {
         return protocol < v1_1_0;
     }
 
+    static boolean isBefore0160(int protocol) {
+        return protocol < v0_16_0;
+    }
+
+    static boolean isBefore100(int protocol) {
+        return protocol < v1_0_0;
+    }
+
     @SupportedProtocol
     static int getPacketPoolProtocol(@SupportedProtocol int protocol) {
         switch (protocol) {
@@ -302,7 +312,7 @@ public interface ProtocolInfo {
             case v1_0_6:
                 return "1.0.6";
             case v1_0_7:
-                return "1.0.9";
+                return "1.0.9"; // 1.0.7, 1.0.8, and 1.0.9 share protocol 107
             case v1_1_0:
             default:
                 return "1.1.3";

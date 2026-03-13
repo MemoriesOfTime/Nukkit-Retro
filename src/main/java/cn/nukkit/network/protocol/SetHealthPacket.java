@@ -13,12 +13,20 @@ public class SetHealthPacket extends DataPacket {
 
     @Override
     public void decode() {
-
+        if (this.protocol < ProtocolInfo.v0_16_0) {
+            this.health = this.getInt();
+        } else {
+            this.health = (int) this.getUnsignedVarInt();
+        }
     }
 
     @Override
     public void encode() {
         this.reset();
-        this.putUnsignedVarInt(this.health);
+        if (this.protocol < ProtocolInfo.v0_16_0) {
+            this.putInt(this.health);
+        } else {
+            this.putUnsignedVarInt(this.health);
+        }
     }
 }

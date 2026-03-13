@@ -137,8 +137,9 @@ public abstract class DataPacket extends BinaryStream implements Cloneable {
     public DataPacket clone() {
         try {
             DataPacket packet = (DataPacket) super.clone();
-            if (this.getCount() >= 0) {
-                packet.setBuffer(this.getBuffer());
+            byte[] buffer = this.getBuffer();
+            if (buffer != null) {
+                packet.setBuffer(buffer);
             }
             return packet;
         } catch (CloneNotSupportedException e) {
