@@ -50,3 +50,6 @@ logs
 logs/*
 resource_packs
 resource_packs/*
+
+# macOS
+.DS_Store

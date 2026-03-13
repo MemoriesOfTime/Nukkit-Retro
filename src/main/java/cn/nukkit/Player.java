@@ -1117,6 +1117,23 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         return gamemode;
     }
 
+    /**
+     * Dispatches a command with a PlayerCommandPreprocessEvent
+     *
+     * @param commandLine
+     */
+    private void dispatchCommandWithEvent(String commandLine) {
+        PlayerCommandPreprocessEvent event = new PlayerCommandPreprocessEvent(this, commandLine);
+        this.server.getPluginManager().callEvent(event);
+        if (event.isCancelled()) {
+            return;
+        }
+        Timings.playerCommandTimer.startTiming();
+        String cmd = event.getMessage();
+        this.server.dispatchCommand(event.getPlayer(), cmd.startsWith("/") ? cmd.substring(1) : cmd);
+        Timings.playerCommandTimer.stopTiming();
+    }
+
     public boolean setGamemode(int gamemode) {
         return this.setGamemode(gamemode, false, null);
     }
@@ -3115,15 +3132,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                             }
                         }
                     }
-                    PlayerCommandPreprocessEvent playerCommandPreprocessEvent = new PlayerCommandPreprocessEvent(this, "/" + commandText);
-                    this.server.getPluginManager().callEvent(playerCommandPreprocessEvent);
-                    if (playerCommandPreprocessEvent.isCancelled()) {
-                        break;
-                    }
-
-                    Timings.playerCommandTimer.startTiming();
-                    this.server.dispatchCommand(playerCommandPreprocessEvent.getPlayer(), playerCommandPreprocessEvent.getMessage().substring(1));
-                    Timings.playerCommandTimer.stopTiming();
+                    dispatchCommandWithEvent("/" + commandText);
                     break;
                 case ProtocolInfo.TEXT_PACKET:
                     if (!this.spawned || !this.isAlive()) {
@@ -3137,10 +3146,14 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         textPacket.message = this.removeFormat ? TextFormat.clean(textPacket.message) : textPacket.message;
                         for (String msg : textPacket.message.split("\n")) {
                             if (!"".equals(msg.trim()) && msg.length() <= 255 && this.messageCounter-- > 0) {
-                                PlayerChatEvent chatEvent = new PlayerChatEvent(this, msg);
-                                this.server.getPluginManager().callEvent(chatEvent);
-                                if (!chatEvent.isCancelled()) {
-                                    this.server.broadcastMessage(this.getServer().getLanguage().translateString(chatEvent.getFormat(), new String[]{chatEvent.getPlayer().getDisplayName(), chatEvent.getMessage()}), chatEvent.getRecipients());
+                                if (msg.startsWith("/")) {
+                                    dispatchCommandWithEvent(msg);
+                                } else {
+                                    PlayerChatEvent chatEvent = new PlayerChatEvent(this, msg);
+                                    this.server.getPluginManager().callEvent(chatEvent);
+                                    if (!chatEvent.isCancelled()) {
+                                        this.server.broadcastMessage(this.getServer().getLanguage().translateString(chatEvent.getFormat(), new String[]{chatEvent.getPlayer().getDisplayName(), chatEvent.getMessage()}), chatEvent.getRecipients());
+                                    }
                                 }
                             }
                         }
