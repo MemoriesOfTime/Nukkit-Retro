@@ -40,7 +40,14 @@ public class PlayerListPacket extends DataPacket {
                     this.putVarLong(entry.entityId);
                 }
                 this.putString(entry.name);
-                this.putSkin(entry.skin);
+                if (this.protocol < ProtocolInfo.v0_13_1) {
+                    byte[] skinData = entry.skin != null ? entry.skin.getData() : new byte[Skin.SINGLE_SKIN_SIZE];
+                    this.putBoolean(entry.skin != null && Skin.MODEL_ALEX.equals(entry.skin.getModel()));
+                    this.putByte((byte) 0);
+                    this.putByteArray(skinData);
+                } else {
+                    this.putSkin(entry.skin);
+                }
             } else {
                 this.putUUID(entry.uuid);
             }

@@ -51,10 +51,22 @@ public class ContainerSetContentPacket extends DataPacket {
             this.slots[s] = this.getSlot();
         }
 
+        if (this.feof()) {
+            this.hotbar = new int[0];
+            return;
+        }
+
+        count = (this.protocol < ProtocolInfo.v0_16_0) ? this.getShort() : (int) this.getUnsignedVarInt();
         if ((ProtocolInfo.isLegacyProtocol(this.protocol) && this.windowid != SPECIAL_INVENTORY)) {
             this.hotbar = new int[0];
+            for (int s = 0; s < count && !this.feof(); ++s) {
+                if (this.protocol < ProtocolInfo.v0_16_0) {
+                    this.getInt();
+                } else {
+                    this.getVarInt();
+                }
+            }
         } else {
-            count = (this.protocol < ProtocolInfo.v0_16_0) ? this.getShort() : (int) this.getUnsignedVarInt();
             this.hotbar = new int[count];
             for (int s = 0; s < count && !this.feof(); ++s) {
                 this.hotbar[s] = (this.protocol < ProtocolInfo.v0_16_0) ? this.getInt() : this.getVarInt();

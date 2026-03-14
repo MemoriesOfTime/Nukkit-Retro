@@ -1,6 +1,7 @@
 package cn.nukkit.item;
 
 import cn.nukkit.block.BlockDoorAcacia;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 public class ItemDoorAcacia extends Item {
     public ItemDoorAcacia() {
@@ -16,4 +17,8 @@ public class ItemDoorAcacia extends Item {
         this.block = new BlockDoorAcacia();
     }
 
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v0_14_0;
+    }
 }

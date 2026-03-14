@@ -41,7 +41,7 @@ public class LoginPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if (ProtocolInfo.getPacketPoolProtocol(this.protocol) == ProtocolInfo.v0_14_2) {
+        if (this.protocol < ProtocolInfo.v0_15_0) {
             this.username = this.getLegacyString();
             this.clientProtocol = this.getInt();
             this.getInt(); // secondary protocol field, kept for compatibility with old login payload
@@ -133,6 +133,21 @@ public class LoginPacket extends DataPacket {
     }
 
     private Skin decodeLegacySkin() {
+        if (this.protocol < ProtocolInfo.v0_13_1) {
+            if (this.feof()) {
+                return new Skin(new byte[Skin.SINGLE_SKIN_SIZE], Skin.MODEL_STEVE);
+            }
+
+            boolean slim = this.getBoolean();
+            if (!this.feof()) {
+                this.getByte(); // legacy alpha byte, retained only for compatibility
+            }
+
+            int skinLength = !this.feof() && this.getCount() - this.getOffset() >= 2 ? this.getShort() & 0xffff : 0;
+            int readable = Math.max(0, this.getCount() - this.getOffset());
+            return this.decodeSkinOrDefault(this.get(Math.min(skinLength, readable)), slim ? Skin.MODEL_ALEX : Skin.MODEL_STEVE);
+        }
+
         String skinModel = this.getLegacyString();
         int remaining = Math.max(0, this.getCount() - this.getOffset());
 

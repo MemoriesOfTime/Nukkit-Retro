@@ -14,6 +14,7 @@ import cn.nukkit.level.sound.ItemFrameRemovedSound;
 import cn.nukkit.math.BlockFace;
 import cn.nukkit.nbt.tag.CompoundTag;
 import cn.nukkit.nbt.tag.Tag;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 import java.util.Random;
 
@@ -38,6 +39,11 @@ public class BlockItemFrame extends BlockTransparent {
     @Override
     public String getName() {
         return "Item Frame";
+    }
+
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v0_14_0;
     }
 
     @Override

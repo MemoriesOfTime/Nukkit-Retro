@@ -34,6 +34,7 @@ public class Network {
     public static final byte CHANNEL_END = 31;
 
     private PacketPool packetPool60;
+    private PacketPool packetPool39;
     private PacketPool packetPool81;
     private PacketPool packetPool84;
     private PacketPool packetPool91;
@@ -173,9 +174,9 @@ public class Network {
         }
 
         if (ProtocolInfo.isBefore0160(protocol)) {
-            // 0.14.x ~ 0.15.x: 内部包使用4字节大端int长度前缀
+            // 0.13.x ~ 0.15.x: 内部包使用4字节大端 int 长度前缀
             int offset = 0;
-            boolean is014 = ProtocolInfo.getPacketPoolProtocol(protocol) == ProtocolInfo.v0_14_2;
+            boolean isClassicLegacy = protocol < ProtocolInfo.v0_15_0;
             try {
                 List<DataPacket> packets = new ArrayList<>();
                 while (offset < len) {
@@ -184,15 +185,50 @@ public class Network {
                     byte[] buf = Binary.subBytes(data, offset, pkLen);
                     offset += pkLen;
 
-                    if (is014) {
-                        // 0.14.x: [headerByte][packetID][data...]
-                        if (buf.length < 2) {
+                    if (isClassicLegacy) {
+                        if (buf.length < 1) {
                             continue;
                         }
-                        DataPacket pk = this.getPacket(buf[1] & 0xff, protocol);
+
+                        boolean is014orLater = (buf[0] & 0xff) == 0x8e && buf.length >= 2;
+                        int dataOffset;
+                        int packetId;
+
+                        if (is014orLater) {
+                            dataOffset = 2;
+                            packetId = buf[1] & 0xff;
+                        } else {
+                            dataOffset = 1;
+                            packetId = buf[0] & 0xff;
+                        }
+
+                        @SupportedProtocol int pktProtocol = protocol;
+
+                        if (packetId == 0x8f && buf.length >= 8) {
+                            int usernameOffset = is014orLater ? 2 : 1;
+                            if (usernameOffset + 2 <= buf.length) {
+                                int usernameLength = Binary.readShort(Binary.subBytes(buf, usernameOffset, 2)) & 0xffff;
+                                int protocolOffset = usernameOffset + 2 + usernameLength;
+                                if (protocolOffset + 4 <= buf.length) {
+                                    int clientProtocol = Binary.readInt(Binary.subBytes(buf, protocolOffset, 4));
+                                    if (ProtocolInfo.isSupportedProtocol(clientProtocol) && clientProtocol < ProtocolInfo.v0_15_0) {
+                                        pktProtocol = clientProtocol;
+                                        if (player != null && player.protocol == Integer.MAX_VALUE) {
+                                            player.protocol = clientProtocol;
+                                        }
+                                        protocol = clientProtocol;
+                                        if (Nukkit.DEBUG > 1) {
+                                            this.server.getLogger().debug("Classic LoginPacket detected: clientProtocol=" + clientProtocol + ", playerProtocol=" + protocol + (player != null ? ", player=" + player.getAddress() : ""));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        DataPacket pk = this.getPacket(packetId, pktProtocol);
                         if (pk != null) {
-                            pk.protocol = protocol;
-                            pk.setBuffer(buf, 2);
+                            pk.protocol = pktProtocol;
+                            pk.setBuffer(buf, dataOffset);
                             pk.decode();
                             packets.add(pk);
                         }
@@ -349,15 +385,40 @@ public class Network {
             }
         }
 
-        // 最后尝试 0.14.x 格式：4字节 int 长度 + [headerByte, packetID, ...]
-        // 0.14.x LoginPacket 的翻译 ID 为 0x8f
+        // 最后尝试 0.13.x ~ 0.14.x 格式：4字节 int 长度 + [packetData...]
+        // 0.13.x / 0.14.x LoginPacket 的翻译 ID 都是 0x8f
         if (len >= 8) {
             try {
                 int pkLen = Binary.readInt(Binary.subBytes(data, 0, 4));
                 if (pkLen > 0 && pkLen <= len - 4) {
                     byte[] buf = Binary.subBytes(data, 4, pkLen);
-                    if (buf.length >= 2 && (buf[1] & 0xff) == 0x8f) {
+                    // 0.14.x: [0x8e][0x8f][username_short][username...][protocol_int]
+                    if (buf.length >= 2 && (buf[0] & 0xff) == 0x8e && (buf[1] & 0xff) == 0x8f) {
+                        if (buf.length >= 8) {
+                            int usernameLength = Binary.readShort(Binary.subBytes(buf, 2, 2)) & 0xffff;
+                            int protocolOffset = 4 + usernameLength;
+                            if (protocolOffset + 4 <= buf.length) {
+                                int clientProtocol = Binary.readInt(Binary.subBytes(buf, protocolOffset, 4));
+                                if (ProtocolInfo.isSupportedProtocol(clientProtocol) && clientProtocol < ProtocolInfo.v0_15_0) {
+                                    return clientProtocol;
+                                }
+                            }
+                        }
                         return ProtocolInfo.v0_14_2;
+                    }
+                    // 0.13.x: [0x8f][username_short][username...][protocol_int]（无 0x8e 前缀）
+                    if (buf.length >= 1 && (buf[0] & 0xff) == 0x8f) {
+                        if (buf.length >= 7) {
+                            int usernameLength = Binary.readShort(Binary.subBytes(buf, 1, 2)) & 0xffff;
+                            int protocolOffset = 3 + usernameLength;
+                            if (protocolOffset + 4 <= buf.length) {
+                                int clientProtocol = Binary.readInt(Binary.subBytes(buf, protocolOffset, 4));
+                                if (ProtocolInfo.isSupportedProtocol(clientProtocol) && clientProtocol < ProtocolInfo.v0_14_0) {
+                                    return clientProtocol;
+                                }
+                            }
+                        }
+                        return ProtocolInfo.v0_13_2;
                     }
                 }
             } catch (Exception ignored) {
@@ -374,6 +435,8 @@ public class Network {
 
     public PacketPool getPacketPool(@SupportedProtocol int protocol) {
         switch (ProtocolInfo.getPacketPoolProtocol(protocol)) {
+            case ProtocolInfo.v0_13_2:
+                return this.packetPool39;
             case ProtocolInfo.v0_14_2:
                 return this.packetPool60;
             case ProtocolInfo.v0_15_0:
@@ -400,6 +463,9 @@ public class Network {
 
     public void setPacketPool(@SupportedProtocol int protocol, PacketPool packetPool) {
         switch (ProtocolInfo.getPacketPoolProtocol(protocol)) {
+            case ProtocolInfo.v0_13_2:
+                this.packetPool39 = packetPool;
+                break;
             case ProtocolInfo.v0_14_2:
                 this.packetPool60 = packetPool;
                 break;
@@ -552,6 +618,16 @@ public class Network {
         pool60.registerPacket(0x97, RemovePlayerPacket.class);
 
         this.packetPool60 = pool60.build();
+        this.packetPool39 = this.packetPool60.toBuilder()
+                .protocolVersion(ProtocolInfo.v0_13_2)
+                .minecraftVersion(ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_13_2))
+                .deregisterPacket(0xc6)
+                .deregisterPacket(0xc7)
+                .deregisterPacket(0xc8)
+                .deregisterPacket(0xc9)
+                .deregisterPacket(0xca)
+                .deregisterPacket(0xcb)
+                .build();
         this.packetPool81 = pool81.build();
         this.packetPool84 = pool84.build();
         this.packetPool91 = pool91.build();

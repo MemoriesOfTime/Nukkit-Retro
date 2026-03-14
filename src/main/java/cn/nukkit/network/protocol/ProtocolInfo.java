@@ -14,6 +14,12 @@ import java.util.List;
  */
 public interface ProtocolInfo {
 
+    @ApiStatus.AvailableSince("0.13.0")
+    int v0_13_0 = 37;
+    @ApiStatus.AvailableSince("0.13.1")
+    int v0_13_1 = 38;
+    @ApiStatus.AvailableSince("0.13.2")
+    int v0_13_2 = 39;
     @ApiStatus.AvailableSince("0.14.0")
     int v0_14_0 = 45;
     @ApiStatus.AvailableSince("0.14.1")
@@ -58,6 +64,9 @@ public interface ProtocolInfo {
     int CURRENT_PROTOCOL = v1_1_0;
 
     List<Integer> SUPPORTED_PROTOCOLS = Collections.unmodifiableList(Arrays.asList(
+            v0_13_0,
+            v0_13_1,
+            v0_13_2,
             v0_14_0,
             v0_14_1,
             v0_14_2,
@@ -80,32 +89,42 @@ public interface ProtocolInfo {
     String MINECRAFT_VERSION_NETWORK = getMinecraftVersion(CURRENT_PROTOCOL);
     String MINECRAFT_VERSION = "v" + MINECRAFT_VERSION_NETWORK;
 
-    /**
-     * 标记当前分支明确支持的协议版本常量。
-     */
-    @Documented
-    @Retention(RetentionPolicy.SOURCE)
-    @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.LOCAL_VARIABLE, ElementType.METHOD})
-    @MagicConstant(intValues = {
-            v0_14_0,
-            v0_14_1,
-            v0_14_2,
-            v0_14_3,
-            v0_15_0,
-            v0_15_4,
-            v0_15_9,
-            v0_15_10,
-            v0_16_0,
-            v1_0_0_0,
-            v1_0_0,
-            v1_0_3,
-            v1_0_4,
-            v1_0_5,
-            v1_0_6,
-            v1_0_7,
-            v1_1_0
-    })
-    @interface SupportedProtocol {
+    @SupportedProtocol
+    static int getPacketPoolProtocol(int protocol) {
+        switch (protocol) {
+            case v0_13_0:
+            case v0_13_1:
+            case v0_13_2:
+                return v0_13_2;
+            case v0_14_0:
+            case v0_14_1:
+            case v0_14_2:
+            case v0_14_3:
+                return v0_14_2;
+            case v0_15_0:
+                return v0_15_0;
+            case v0_15_4:
+            case v0_15_9:
+            case v0_15_10:
+                return v0_15_10;
+            case v0_16_0:
+                return v0_16_0;
+            case v1_0_0_0:
+                return v1_0_0_0;
+            case v1_0_0:
+                return v1_0_0;
+            case v1_0_3:
+                return v1_0_3;
+            case v1_0_4:
+                return v1_0_4;
+            case v1_0_5:
+            case v1_0_6:
+            case v1_0_7:
+                return v1_0_5;
+            case v1_1_0:
+            default:
+                return v1_1_0;
+        }
     }
 
     /**
@@ -237,46 +256,14 @@ public interface ProtocolInfo {
         return protocol < v0_16_0;
     }
 
-    static boolean isBefore100(int protocol) {
-        return protocol < v1_0_0;
-    }
-
-    @SupportedProtocol
-    static int getPacketPoolProtocol(int protocol) {
-        switch (protocol) {
-            case v0_14_0:
-            case v0_14_1:
-            case v0_14_2:
-            case v0_14_3:
-                return v0_14_2;
-            case v0_15_0:
-                return v0_15_0;
-            case v0_15_4:
-            case v0_15_9:
-            case v0_15_10:
-                return v0_15_10;
-            case v0_16_0:
-                return v0_16_0;
-            case v1_0_0_0:
-                return v1_0_0_0;
-            case v1_0_0:
-                return v1_0_0;
-            case v1_0_3:
-                return v1_0_3;
-            case v1_0_4:
-                return v1_0_4;
-            case v1_0_5:
-            case v1_0_6:
-            case v1_0_7:
-                return v1_0_5;
-            case v1_1_0:
-            default:
-                return v1_1_0;
-        }
-    }
-
     static String getMinecraftVersion(@SupportedProtocol int protocol) {
         switch (protocol) {
+            case v0_13_0:
+                return "0.13.0";
+            case v0_13_1:
+                return "0.13.1";
+            case v0_13_2:
+                return "0.13.2";
             case v0_14_0:
                 return "0.14.0";
             case v0_14_1:
@@ -313,5 +300,36 @@ public interface ProtocolInfo {
             default:
                 return "1.1.3";
         }
+    }
+
+    /**
+     * 标记当前分支明确支持的协议版本常量。
+     */
+    @Documented
+    @Retention(RetentionPolicy.SOURCE)
+    @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.LOCAL_VARIABLE, ElementType.METHOD})
+    @MagicConstant(intValues = {
+            v0_13_0,
+            v0_13_1,
+            v0_13_2,
+            v0_14_0,
+            v0_14_1,
+            v0_14_2,
+            v0_14_3,
+            v0_15_0,
+            v0_15_4,
+            v0_15_9,
+            v0_15_10,
+            v0_16_0,
+            v1_0_0_0,
+            v1_0_0,
+            v1_0_3,
+            v1_0_4,
+            v1_0_5,
+            v1_0_6,
+            v1_0_7,
+            v1_1_0
+    })
+    @interface SupportedProtocol {
     }
 }

@@ -56,7 +56,7 @@ public class StartGamePacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_15_0)) {
+        if (this.protocol < ProtocolInfo.v0_14_0) {
             this.putInt(this.seed);
             this.putByte(this.dimension);
             this.putInt(this.generator);
@@ -68,10 +68,7 @@ public class StartGamePacket extends DataPacket {
             this.putFloat(this.x);
             this.putFloat(this.y);
             this.putFloat(this.z);
-            this.putBoolean(this.b1);
-            this.putBoolean(this.b2);
-            this.putBoolean(this.b3);
-            this.putString(this.unknownstr);
+            this.putByte((byte) 0);
             return;
         }
 

@@ -4,6 +4,7 @@ import cn.nukkit.Player;
 import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemRedstoneRepeater;
 import cn.nukkit.math.BlockFace;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 /**
  * Created by CreeperFace on 10.4.2017.
@@ -27,6 +28,11 @@ public class BlockRedstoneRepeaterUnpowered extends BlockRedstoneDiode {
     @Override
     public String getName() {
         return "Unpowered Repeater";
+    }
+
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v0_14_0;
     }
 
     @Override

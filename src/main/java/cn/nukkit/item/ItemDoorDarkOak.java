@@ -1,6 +1,7 @@
 package cn.nukkit.item;
 
 import cn.nukkit.block.BlockDoorDarkOak;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 public class ItemDoorDarkOak extends Item {
     public ItemDoorDarkOak() {
@@ -16,4 +17,8 @@ public class ItemDoorDarkOak extends Item {
         this.block = new BlockDoorDarkOak();
     }
 
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v0_14_0;
+    }
 }

@@ -21,17 +21,29 @@ public class BlockEntityDataPacket extends DataPacket {
 
     @Override
     public void decode() {
-        BlockVector3 v = this.getBlockCoords();
-        this.x = v.x;
-        this.y = v.y;
-        this.z = v.z;
+        if (this.protocol < ProtocolInfo.v0_14_0) {
+            this.x = this.getInt();
+            this.y = this.getByte();
+            this.z = this.getInt();
+        } else {
+            BlockVector3 v = this.getBlockCoords();
+            this.x = v.x;
+            this.y = v.y;
+            this.z = v.z;
+        }
         this.namedTag = this.get();
     }
 
     @Override
     public void encode() {
         this.reset();
-        this.putBlockCoords(this.x, this.y, this.z);
+        if (this.protocol < ProtocolInfo.v0_14_0) {
+            this.putInt(this.x);
+            this.putByte((byte) this.y);
+            this.putInt(this.z);
+        } else {
+            this.putBlockCoords(this.x, this.y, this.z);
+        }
         this.put(this.namedTag);
     }
 }

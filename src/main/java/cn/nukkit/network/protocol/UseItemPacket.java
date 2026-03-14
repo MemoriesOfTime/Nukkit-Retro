@@ -38,7 +38,19 @@ public class UseItemPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if (this.protocol < ProtocolInfo.v0_14_0) {
+            this.x = this.getInt();
+            this.y = this.getInt();
+            this.z = this.getInt();
+            this.face = this.getByte();
+            this.fx = this.getFloat();
+            this.fy = this.getFloat();
+            this.fz = this.getFloat();
+            this.posX = this.getFloat();
+            this.posY = this.getFloat();
+            this.posZ = this.getFloat();
+            this.slot = -1;
+        } else if ((this.protocol < ProtocolInfo.v0_16_0)) {
             this.x = this.getInt();
             this.y = this.getInt();
             this.z = this.getInt();

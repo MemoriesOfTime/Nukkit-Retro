@@ -1,20 +1,15 @@
 package cn.nukkit.test;
 
-import cn.nukkit.network.protocol.ChunkRadiusUpdatedPacket;
-import cn.nukkit.network.protocol.FullChunkDataPacket;
-import cn.nukkit.network.protocol.MovePlayerPacket;
-import cn.nukkit.network.protocol.ProtocolInfo;
-import cn.nukkit.network.protocol.RequestChunkRadiusPacket;
-import cn.nukkit.network.protocol.StartGamePacket;
+import cn.nukkit.network.protocol.*;
+import cn.nukkit.utils.Binary;
 import cn.nukkit.utils.BinaryStream;
+import cn.nukkit.utils.Zlib;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 
-import static org.junit.jupiter.api.Assertions.assertAll;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 
 @DisplayName("Legacy 0.15 Packet")
 class Legacy015PacketTest {
@@ -162,5 +157,24 @@ class Legacy015PacketTest {
                 () -> assertEquals(45.0f, packet.pitch, 0.0001f),
                 () -> assertEquals(true, packet.onGround)
         );
+    }
+
+    @Test
+    @DisplayName("LoginPacket 0.15.x 应使用 LInt 读取压缩数据长度")
+    void loginPacket015xShouldUseLIntForCompressedDataLength() throws Exception {
+        byte[] compressedPayload = Zlib.deflate(new byte[0]);
+
+        BinaryStream input = new BinaryStream();
+        input.putByte((byte) 0);
+        input.putInt(ProtocolInfo.v0_15_4);
+        input.putByte((byte) 0);
+        input.putLInt(compressedPayload.length);
+        input.put(compressedPayload);
+
+        byte[] buffer = input.getBuffer();
+        assertEquals(1 + 4 + 1 + 4 + compressedPayload.length, buffer.length);
+
+        int length = Binary.readLInt(new byte[]{buffer[6], buffer[7], buffer[8], buffer[9]});
+        assertEquals(compressedPayload.length, length);
     }
 }

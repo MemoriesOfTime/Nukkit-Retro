@@ -23,12 +23,7 @@ import cn.nukkit.utils.MainLogger;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteOrder;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Pattern;
 
 /**
@@ -2127,7 +2122,7 @@ public class Item implements Cloneable {
     }
 
     public boolean isSupportedOn(int protocolId) {
-        return protocolId >= ProtocolInfo.v0_14_0;
+        return protocolId >= ProtocolInfo.v0_13_0;
     }
 
     public boolean isUnbreakable() {

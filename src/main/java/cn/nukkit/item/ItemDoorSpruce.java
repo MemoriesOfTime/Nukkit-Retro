@@ -1,6 +1,7 @@
 package cn.nukkit.item;
 
 import cn.nukkit.block.BlockDoorSpruce;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 public class ItemDoorSpruce extends Item {
     public ItemDoorSpruce() {
@@ -16,4 +17,8 @@ public class ItemDoorSpruce extends Item {
         this.block = new BlockDoorSpruce();
     }
 
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v0_14_0;
+    }
 }

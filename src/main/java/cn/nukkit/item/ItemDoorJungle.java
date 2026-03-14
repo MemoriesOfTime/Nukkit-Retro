@@ -1,6 +1,7 @@
 package cn.nukkit.item;
 
 import cn.nukkit.block.BlockDoorJungle;
+import cn.nukkit.network.protocol.ProtocolInfo;
 
 public class ItemDoorJungle extends Item {
     public ItemDoorJungle() {
@@ -16,4 +17,8 @@ public class ItemDoorJungle extends Item {
         this.block = new BlockDoorJungle();
     }
 
+    @Override
+    public boolean isSupportedOn(int protocolId) {
+        return protocolId >= ProtocolInfo.v0_14_0;
+    }
 }
