@@ -27,9 +27,6 @@ public class MoveEntityPacket extends DataPacket {
     @Override
     public void decode() {
         if ((this.protocol < ProtocolInfo.v0_16_0)) {
-            if (this.protocol == ProtocolInfo.v0_15_0) {
-                this.getInt();
-            }
             this.eid = this.getLong();
             this.x = this.getFloat();
             this.y = this.getFloat();
@@ -55,9 +52,6 @@ public class MoveEntityPacket extends DataPacket {
     public void encode() {
         this.reset();
         if ((this.protocol < ProtocolInfo.v0_16_0)) {
-            if (this.protocol == ProtocolInfo.v0_15_0) {
-                this.putInt(1);
-            }
             this.putLong(this.eid);
             this.putFloat((float) this.x);
             this.putFloat((float) this.y);

@@ -960,8 +960,13 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             return -1;
         }
 
+        packet = packet.clone();
+        if (packet == null) return -1;
+        packet.protocol = this.protocol;
+        packet.isEncoded = false;
+        packet.encapsulatedPacket = null;
+
         try (Timing timing = Timings.getSendDataPacketTiming(packet)) {
-            packet.protocol = this.protocol;
             DataPacketSendEvent ev = new DataPacketSendEvent(this, packet);
             this.server.getPluginManager().callEvent(ev);
             if (ev.isCancelled()) {
@@ -994,8 +999,13 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             return -1;
         }
 
+        packet = packet.clone();
+        if (packet == null) return -1;
+        packet.protocol = this.protocol;
+        packet.isEncoded = false;
+        packet.encapsulatedPacket = null;
+
         try (Timing timing = Timings.getSendDataPacketTiming(packet)) {
-            packet.protocol = this.protocol;
             DataPacketSendEvent ev = new DataPacketSendEvent(this, packet);
             this.server.getPluginManager().callEvent(ev);
             if (ev.isCancelled()) {
@@ -1512,6 +1522,22 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         }
 
         this.newPosition = null;
+    }
+
+    @Override
+    public void addMovement(double x, double y, double z, double yaw, double pitch, double headYaw) {
+        if (this.chunk == null) return;
+        MovePlayerPacket pk = new MovePlayerPacket();
+        pk.eid = this.getId();
+        pk.x = (float) x;
+        pk.y = (float) y;
+        pk.z = (float) z;
+        pk.yaw = (float) yaw;
+        pk.headYaw = (float) headYaw;
+        pk.pitch = (float) pitch;
+        pk.mode = MovePlayerPacket.MODE_NORMAL;
+        pk.onGround = this.onGround;
+        this.level.addChunkPacket(this.chunk.getX(), this.chunk.getZ(), pk);
     }
 
     @Override
