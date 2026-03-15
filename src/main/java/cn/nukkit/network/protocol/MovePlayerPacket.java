@@ -29,7 +29,7 @@ public class MovePlayerPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.eid = this.getLong();
             this.x = this.getFloat();
             this.y = this.getFloat();
@@ -48,7 +48,7 @@ public class MovePlayerPacket extends DataPacket {
             this.yaw = this.getLFloat();
         }
         this.mode = (byte) this.getByte();
-        this.onGround = (this.protocol < ProtocolInfo.v0_16_0) ? this.getByte() > 0 : this.getBoolean();
+        this.onGround = (ProtocolInfo.isBefore0160(this.protocol)) ? this.getByte() > 0 : this.getBoolean();
         if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
             this.ridingEid = this.getVarLong();
             if (this.mode == MODE_TELEPORT){
@@ -61,7 +61,7 @@ public class MovePlayerPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putLong(this.eid);
             this.putFloat(this.x);
             this.putFloat(this.y);
@@ -77,7 +77,7 @@ public class MovePlayerPacket extends DataPacket {
             this.putLFloat(this.headYaw);
         }
         this.putByte(this.mode);
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putByte(this.onGround ? (byte) 1 : 0);
         } else {
             this.putBoolean(this.onGround);

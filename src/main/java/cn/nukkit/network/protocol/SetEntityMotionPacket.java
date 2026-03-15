@@ -25,10 +25,7 @@ public class SetEntityMotionPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
-            if (this.protocol == ProtocolInfo.v0_15_0) {
-                this.putInt(1);
-            }
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putLong(this.eid);
             this.putFloat(this.motionX);
             this.putFloat(this.motionY);

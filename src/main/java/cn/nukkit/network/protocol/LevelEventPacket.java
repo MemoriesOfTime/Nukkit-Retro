@@ -98,7 +98,7 @@ public class LevelEventPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.evid = this.getShort();
             this.x = this.getFloat();
             this.y = this.getFloat();
@@ -117,7 +117,7 @@ public class LevelEventPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putShort(this.evid);
             this.putFloat(this.x);
             this.putFloat(this.y);

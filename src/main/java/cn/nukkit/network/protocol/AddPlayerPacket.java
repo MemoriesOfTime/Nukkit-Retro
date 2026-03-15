@@ -43,7 +43,7 @@ public class AddPlayerPacket extends DataPacket {
         this.reset();
         this.putUUID(this.uuid);
         this.putString(this.username);
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putLong(this.entityRuntimeId);
             this.putFloat(this.x);
             this.putFloat(this.y);
@@ -52,7 +52,7 @@ public class AddPlayerPacket extends DataPacket {
             this.putFloat(this.speedY);
             this.putFloat(this.speedZ);
             this.putFloat(this.yaw);
-            this.putFloat(this.yaw); //TODO headrot
+            this.putFloat(this.yaw);
             this.putFloat(this.pitch);
         } else {
             this.putVarLong(this.entityUniqueId);

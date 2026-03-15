@@ -35,14 +35,14 @@ public class AddItemEntityPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putLong(this.entityRuntimeId);
         } else {
             this.putVarLong(this.entityUniqueId);
             this.putVarLong(this.entityRuntimeId);
         }
         this.putSlot(this.item);
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putFloat(this.x);
             this.putFloat(this.y);
             this.putFloat(this.z);

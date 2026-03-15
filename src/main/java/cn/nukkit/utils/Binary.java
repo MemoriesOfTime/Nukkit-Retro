@@ -78,7 +78,7 @@ public class Binary {
     }
 
     public static byte[] writeMetadata(int protocol, EntityMetadata metadata) {
-        if (protocol < ProtocolInfo.v0_15_0) {
+        if (ProtocolInfo.isBefore0160(protocol)) {
             return writeLegacyMetadata(metadata);
         }
 
@@ -161,6 +161,11 @@ public class Binary {
             putLegacyMetadataPos(stream, 17, pos.x, pos.y, pos.z);
         }
 
+        // 0.15.x key 23 = DATA_LEAD_HOLDER (long), mapped from DATA_LEAD_HOLDER_EID (38)
+        putLegacyMetadataLong(stream, 23, getLongMetadata(map, Entity.DATA_LEAD_HOLDER_EID, -1));
+        // 0.15.x key 24 = DATA_LEAD (byte), mapped from DATA_FLAG_LEASHED flag
+        putLegacyMetadataByte(stream, 24, hasFlag(flags, Entity.DATA_FLAG_LEASHED) ? 1 : 0);
+
         stream.putByte((byte) 0x7f);
         return stream.getBuffer();
     }
@@ -235,6 +240,11 @@ public class Binary {
         stream.putLInt(x);
         stream.putLInt(y);
         stream.putLInt(z);
+    }
+
+    private static void putLegacyMetadataLong(BinaryStream stream, int id, long value) {
+        stream.putByte((byte) ((7 << 5) | (id & 0x1f)));
+        stream.putLLong(value);
     }
 
     public static EntityMetadata readMetadata(byte[] payload) {

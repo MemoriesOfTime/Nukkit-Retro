@@ -21,7 +21,7 @@ public class BlockEntityDataPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if (this.protocol < ProtocolInfo.v0_14_0) {
+        if (ProtocolInfo.isBefore0140(this.protocol)) {
             this.x = this.getInt();
             this.y = this.getByte();
             this.z = this.getInt();
@@ -37,7 +37,7 @@ public class BlockEntityDataPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if (this.protocol < ProtocolInfo.v0_14_0) {
+        if (ProtocolInfo.isBefore0140(this.protocol)) {
             this.putInt(this.x);
             this.putByte((byte) this.y);
             this.putInt(this.z);

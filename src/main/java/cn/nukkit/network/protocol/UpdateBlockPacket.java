@@ -36,8 +36,8 @@ public class UpdateBlockPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
-            if (this.protocol < ProtocolInfo.v0_15_0) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+            if (ProtocolInfo.isBefore0150(this.protocol)) {
                 this.putInt(1);
             }
             this.putInt(this.x);

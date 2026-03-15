@@ -15,7 +15,7 @@ public class PlayerInputPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.motionX = this.getFloat();
             this.motionY = this.getFloat();
             int flags = this.getByte();

@@ -562,24 +562,30 @@ public class Server {
         }
 
         Timings.playerNetworkSendTimer.startTiming();
-        Map<Integer, List<String>> targetsByProtocol = new HashMap<>();
+        Map<Long, List<String>> targetsByEncoding = new HashMap<>();
         for (Player p : players) {
             if (p.isConnected()) {
                 String target = this.identifier.get(p.rawHashCode());
                 if (target != null) {
-                    targetsByProtocol.computeIfAbsent(p.protocol, key -> new ArrayList<>()).add(target);
+                    boolean legacy012LengthPrefixed = ProtocolInfo.isBefore0130(p.protocol) && p.usesLegacy012LengthPrefixedBatch();
+                    long encodingKey = (((long) p.protocol) << 2) | (legacy012LengthPrefixed ? 2 : 0) | (p.useRawDeflate ? 1 : 0);
+                    targetsByEncoding.computeIfAbsent(encodingKey, key -> new ArrayList<>()).add(target);
                 }
             }
         }
 
-        for (Map.Entry<Integer, List<String>> entry : targetsByProtocol.entrySet()) {
-            byte[] data = this.encodeBatchPackets(entry.getKey(), packets);
+        for (Map.Entry<Long, List<String>> entry : targetsByEncoding.entrySet()) {
+            int protocol = (int) (entry.getKey() >> 2);
+            boolean legacy012LengthPrefixed = (entry.getKey() & 2) != 0;
+            boolean rawDeflate = (entry.getKey() & 1) != 0;
+            byte[] data = this.encodeBatchPackets(protocol, packets, legacy012LengthPrefixed);
 
             if (!forceSync && this.networkCompressionAsync) {
-                this.getScheduler().scheduleAsyncTask(new CompressBatchedTask(data, entry.getValue(), this.networkCompressionLevel));
+                this.getScheduler().scheduleAsyncTask(new CompressBatchedTask(data, entry.getValue(), this.networkCompressionLevel, rawDeflate));
             } else {
                 try {
-                    this.broadcastPacketsCallback(Zlib.deflate(data, this.networkCompressionLevel), entry.getValue());
+                    byte[] compressed = rawDeflate ? Zlib.deflateRaw(data, this.networkCompressionLevel) : Zlib.deflate(data, this.networkCompressionLevel);
+                    this.broadcastPacketsCallback(compressed, entry.getValue());
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
@@ -588,7 +594,7 @@ public class Server {
         Timings.playerNetworkSendTimer.stopTiming();
     }
 
-    private byte[] encodeBatchPackets(@SupportedProtocol int protocol, DataPacket[] packets) {
+    private byte[] encodeBatchPackets(@SupportedProtocol int protocol, DataPacket[] packets, boolean legacy012LengthPrefixed) {
         byte[][] payload = new byte[packets.length * 2][];
         for (int i = 0; i < packets.length; i++) {
             DataPacket p = packets[i].clone();
@@ -602,7 +608,11 @@ public class Server {
             p.tryEncode();
 
             byte[] buf = p.getBuffer();
-            payload[i * 2] = ProtocolInfo.isBefore0160(protocol) ? Binary.writeInt(buf.length) : Binary.writeUnsignedVarInt(buf.length);
+            if (ProtocolInfo.isBefore0130(protocol)) {
+                payload[i * 2] = legacy012LengthPrefixed ? Binary.writeInt(buf.length) : new byte[0];
+            } else {
+                payload[i * 2] = ProtocolInfo.isBefore0160(protocol) ? Binary.writeInt(buf.length) : Binary.writeUnsignedVarInt(buf.length);
+            }
             payload[i * 2 + 1] = buf;
         }
         return Binary.appendBytes(payload);

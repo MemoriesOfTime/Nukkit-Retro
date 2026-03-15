@@ -56,7 +56,7 @@ public class StartGamePacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if (this.protocol < ProtocolInfo.v0_14_0) {
+        if (ProtocolInfo.isBefore0140(this.protocol)) {
             this.putInt(this.seed);
             this.putByte(this.dimension);
             this.putInt(this.generator);
@@ -72,7 +72,7 @@ public class StartGamePacket extends DataPacket {
             return;
         }
 
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putInt(this.seed);
             this.putByte(this.dimension);
             this.putInt(this.generator);

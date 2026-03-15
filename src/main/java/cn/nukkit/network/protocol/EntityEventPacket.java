@@ -35,7 +35,7 @@ public class EntityEventPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.eid = this.getLong();
             this.event = (byte) this.getByte();
             this.unknown = 0;
@@ -49,7 +49,7 @@ public class EntityEventPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putLong(this.eid);
             this.putByte(this.event);
         } else {

@@ -167,7 +167,7 @@ public class EntityHuman extends EntityHumanType {
     @Override
     public void despawnFrom(Player player) {
         if (this.hasSpawned.containsKey(player.getLoaderId())) {
-            if (player.protocol < ProtocolInfo.v0_15_0) {
+            if (ProtocolInfo.isBefore0150(player.protocol)) {
                 RemovePlayerPacket pk = new RemovePlayerPacket();
                 pk.eid = this.getId();
                 pk.uuid = this.getUniqueId();

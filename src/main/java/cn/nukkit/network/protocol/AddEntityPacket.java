@@ -39,7 +39,7 @@ public class AddEntityPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putLong(this.entityRuntimeId);
             this.putInt(this.type);
             this.putFloat(this.x);
@@ -52,7 +52,6 @@ public class AddEntityPacket extends DataPacket {
                 this.putFloat(this.yaw);
                 this.putFloat(this.pitch);
             } else {
-                // 0.15.4-0.15.10使用角度转换
                 this.putFloat(this.yaw * 0.71111f);
                 this.putFloat(this.pitch * 0.71111f);
                 this.putInt(0);

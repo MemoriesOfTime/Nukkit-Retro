@@ -16,13 +16,13 @@ public class SetPlayerGameTypePacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.gamemode = (this.protocol < ProtocolInfo.v0_16_0) ? this.getInt() : this.getVarInt();
+        this.gamemode = (ProtocolInfo.isBefore0160(this.protocol)) ? this.getInt() : this.getVarInt();
     }
 
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putInt(this.gamemode);
         } else {
             this.putVarInt(this.gamemode);

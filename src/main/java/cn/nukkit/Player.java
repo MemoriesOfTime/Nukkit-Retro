@@ -132,6 +132,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     protected final String ip;
     protected boolean removeFormat = true;
     public int protocol = Integer.MAX_VALUE;
+    public boolean useRawDeflate = false;
+    public boolean useUncompressedBatch = false;
 
     protected final int port;
     protected String username;
@@ -192,6 +194,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
     protected boolean enableClientCommand = true;
 
+    private boolean legacy012LengthPrefixedBatch = false;
+
     private BlockEnderChest viewingEnderChest = null;
 
     protected int lastEnderPearl = -1;
@@ -219,6 +223,36 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
     public String getClientSecret() {
         return clientSecret;
+    }
+
+    public static BatchPacket getChunkCacheFromData(int chunkX, int chunkZ, byte[] payload, byte ordering, int protocol) {
+        return getChunkCacheFromData(chunkX, chunkZ, payload, ordering, protocol, false);
+    }
+
+    public static BatchPacket getChunkCacheFromData(int chunkX, int chunkZ, byte[] payload, byte ordering, int protocol, boolean rawDeflate) {
+        FullChunkDataPacket pk = new FullChunkDataPacket();
+        pk.protocol = protocol;
+        pk.chunkX = chunkX;
+        pk.chunkZ = chunkZ;
+        pk.order = ordering;
+        pk.data = payload;
+        pk.tryEncode();
+
+        BatchPacket batch = new BatchPacket();
+        batch.protocol = protocol;
+        byte[][] batchPayload = new byte[2][];
+        byte[] buf = pk.getBuffer();
+        batchPayload[0] = ProtocolInfo.isBefore0160(protocol) ? Binary.writeInt(buf.length) : Binary.writeUnsignedVarInt(buf.length);
+        batchPayload[1] = buf;
+        byte[] data = Binary.appendBytes(batchPayload);
+        Server server = Server.getInstance();
+        int compressionLevel = server != null ? server.networkCompressionLevel : 7;
+        try {
+            batch.payload = rawDeflate ? Zlib.deflateRaw(data, compressionLevel) : Zlib.deflate(data, compressionLevel);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return batch;
     }
 
     /**
@@ -464,55 +498,16 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         if (this.isEnableClientCommand()) this.sendCommandData();
     }
 
+    public boolean usesLegacy012LengthPrefixedBatch() {
+        return this.legacy012LengthPrefixedBatch;
+    }
+
+    public void setLegacy012LengthPrefixedBatch(boolean legacy012LengthPrefixedBatch) {
+        this.legacy012LengthPrefixedBatch = legacy012LengthPrefixedBatch;
+    }
+
     public boolean isEnableClientCommand() {
-        return this.enableClientCommand && !(this.protocol < ProtocolInfo.v0_16_0);
-    }
-
-    public void setEnableClientCommand(boolean enable) {
-        this.enableClientCommand = enable;
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
-            return;
-        }
-        SetCommandsEnabledPacket pk = new SetCommandsEnabledPacket();
-        pk.enabled = enable;
-        this.dataPacket(pk);
-        if (enable) this.sendCommandData();
-    }
-
-    public void sendCommandData() {
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
-            return;
-        }
-        AvailableCommandsPacket pk = new AvailableCommandsPacket();
-        Map<String, CommandDataVersions> data = new HashMap<>();
-        int count = 0;
-        for (Command command : this.server.getCommandMap().getCommands().values()) {
-            if (!command.testPermissionSilent(this)) {
-                continue;
-            }
-            ++count;
-            CommandDataVersions data0 = command.generateCustomCommandData(this);
-            data.put(command.getName(), data0);
-        }
-        if (count > 0) {
-            //TODO: structure checking
-            pk.commands = new Gson().toJson(data);
-            int identifier = this.dataPacket(pk, true); // We *need* ACK so we can be sure that the client received the packet or not
-            Thread t = new Thread() {
-                public void run() {
-                    // We are going to wait 3 seconds, if after 3 seconds we didn't receive a reply from the client, resend the packet.
-                    try {
-                        Thread.sleep(3000);
-                        boolean status = needACK.get(identifier);
-                        if (!status && isOnline()) {
-                            sendCommandData();
-                            return;
-                        }
-                    } catch (InterruptedException e) {}
-                }
-            };
-            t.start();
-        }
+        return this.enableClientCommand && !(ProtocolInfo.isBefore0160(this.protocol));
     }
 
     @Override
@@ -685,30 +680,51 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         this.sendChunk(x, z, payload, FullChunkDataPacket.ORDER_COLUMNS);
     }
 
-    public static BatchPacket getChunkCacheFromData(int chunkX, int chunkZ, byte[] payload, byte ordering, int protocol) {
-        FullChunkDataPacket pk = new FullChunkDataPacket();
-        pk.protocol = protocol;
-        pk.chunkX = chunkX;
-        pk.chunkZ = chunkZ;
-        pk.order = ordering;
-        pk.data = payload;
-        pk.tryEncode();
-
-        BatchPacket batch = new BatchPacket();
-        batch.protocol = protocol;
-        byte[][] batchPayload = new byte[2][];
-        byte[] buf = pk.getBuffer();
-        batchPayload[0] = ProtocolInfo.isBefore0160(protocol) ? Binary.writeInt(buf.length) : Binary.writeUnsignedVarInt(buf.length);
-        batchPayload[1] = buf;
-        byte[] data = Binary.appendBytes(batchPayload);
-        Server server = Server.getInstance();
-        int compressionLevel = server != null ? server.networkCompressionLevel : 7;
-        try {
-            batch.payload = Zlib.deflate(data, compressionLevel);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+    public void setEnableClientCommand(boolean enable) {
+        this.enableClientCommand = enable;
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+            return;
         }
-        return batch;
+        SetCommandsEnabledPacket pk = new SetCommandsEnabledPacket();
+        pk.enabled = enable;
+        this.dataPacket(pk);
+        if (enable) this.sendCommandData();
+    }
+
+    public void sendCommandData() {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+            return;
+        }
+        AvailableCommandsPacket pk = new AvailableCommandsPacket();
+        Map<String, CommandDataVersions> data = new HashMap<>();
+        int count = 0;
+        for (Command command : this.server.getCommandMap().getCommands().values()) {
+            if (!command.testPermissionSilent(this)) {
+                continue;
+            }
+            ++count;
+            CommandDataVersions data0 = command.generateCustomCommandData(this);
+            data.put(command.getName(), data0);
+        }
+        if (count > 0) {
+            //TODO: structure checking
+            pk.commands = new Gson().toJson(data);
+            int identifier = this.dataPacket(pk, true); // We *need* ACK so we can be sure that the client received the packet or not
+            Thread t = new Thread() {
+                public void run() {
+                    // We are going to wait 3 seconds, if after 3 seconds we didn't receive a reply from the client, resend the packet.
+                    try {
+                        Thread.sleep(3000);
+                        boolean status = needACK.get(identifier);
+                        if (!status && isOnline()) {
+                            sendCommandData();
+                            return;
+                        }
+                    } catch (InterruptedException e) {}
+                }
+            };
+            t.start();
+        }
     }
 
     public void sendChunk(int x, int z, byte[] payload, byte ordering) {
@@ -718,11 +734,22 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         byte chunkOrder = ordering;
 
-        if (this.protocol < ProtocolInfo.v0_16_0) {
-            byte[] legacyPayload = this.level.buildLegacyChunkPayload(x, z);
-            if (legacyPayload != null) {
-                payload = legacyPayload;
-                chunkOrder = FullChunkDataPacket.ORDER_LAYERED;
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
+            if (ProtocolInfo.isBefore0130(this.protocol)) {
+                byte[] legacyPayload = this.level.buildLegacyColumnChunkPayload(x, z);
+                if (legacyPayload != null) {
+                    payload = legacyPayload;
+                    chunkOrder = FullChunkDataPacket.ORDER_COLUMNS;
+                }
+            } else {
+                FullChunk fullChunk = this.level.getChunk(x, z, false);
+                if (fullChunk instanceof cn.nukkit.level.format.anvil.Chunk) {
+                    byte[] legacyPayload = this.level.buildLegacyChunkPayload(x, z);
+                    if (legacyPayload != null) {
+                        payload = legacyPayload;
+                        chunkOrder = FullChunkDataPacket.ORDER_LAYERED;
+                    }
+                }
             }
         }
 
@@ -826,7 +853,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     + " sending PLAYER_SPAWN");
         }
 
-        if (!(this.protocol < ProtocolInfo.v0_16_0)) {
+        if (!(ProtocolInfo.isBefore0160(this.protocol))) {
             this.server.sendRecipeList(this);
         }
         this.getAdventureSettings().update();
@@ -897,7 +924,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         //Weather
         this.getLevel().sendWeather(this);
 
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.sendAttributes();
 
             SetHealthPacket setHealthPacket = new SetHealthPacket();
@@ -1566,8 +1593,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
     public void sendAttributes() {
         UpdateAttributesPacket pk = new UpdateAttributesPacket();
-        pk.entityId = (this.protocol < ProtocolInfo.v0_16_0) ? 0 : this.getId();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        pk.entityId = (ProtocolInfo.isBefore0160(this.protocol)) ? 0 : this.getId();
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             // 0.15.x客户端不使用属性系统来显示饥饿值和经验，仅发送基本属性
             pk.entries = new Attribute[]{
                     Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue(this.getMaxHealth()).setValue(health > 0 ? (health < getMaxHealth() ? health : getMaxHealth()) : 0),
@@ -1888,7 +1915,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     this.iusername = this.username.toLowerCase();
                     this.setDataProperty(new StringEntityData(DATA_NAMETAG, this.username), false);
 
-                    this.loginChainData = this.protocol < ProtocolInfo.v0_16_0 ? null : ClientChainData.read(loginPacket);
+                    this.loginChainData = ProtocolInfo.isBefore0160(this.protocol) ? null : ClientChainData.read(loginPacket);
 
                     if (this.server.getOnlinePlayers().size() >= this.server.getMaxPlayers() && this.kick(PlayerKickEvent.Reason.SERVER_FULL, "disconnectionScreen.serverFull", false)) {
                         break;
@@ -1944,7 +1971,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     statusPacket.status = PlayStatusPacket.LOGIN_SUCCESS;
                     this.dataPacket(statusPacket);
 
-                    if ((this.protocol < ProtocolInfo.v0_16_0)) {
+                    if ((ProtocolInfo.isBefore0160(this.protocol))) {
                         this.processLogin();
                         break;
                     }
@@ -3811,7 +3838,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     }
 
     public void sendTip(String message) {
-        if (this.protocol >= ProtocolInfo.v0_14_2 && this.protocol < ProtocolInfo.v0_15_0) {
+        if (this.protocol >= ProtocolInfo.v0_14_2 && ProtocolInfo.isBefore0150(this.protocol)) {
             this.sendPopup(message);
             return;
         }
@@ -4218,7 +4245,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         if (this.spawned) {
             UpdateAttributesPacket pk = new UpdateAttributesPacket();
             pk.entries = new Attribute[]{attr};
-            pk.entityId = (this.protocol < ProtocolInfo.v0_16_0) ? 0 : this.id;
+            pk.entityId = (ProtocolInfo.isBefore0160(this.protocol)) ? 0 : this.id;
             this.dataPacket(pk);
         }
     }
@@ -4293,7 +4320,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     public void setAttribute(Attribute attribute) {
         UpdateAttributesPacket pk = new UpdateAttributesPacket();
         pk.entries = new Attribute[]{attribute};
-        pk.entityId = (this.protocol < ProtocolInfo.v0_16_0) ? 0 : this.id;
+        pk.entityId = (ProtocolInfo.isBefore0160(this.protocol)) ? 0 : this.id;
         this.dataPacket(pk);
     }
 
@@ -4400,7 +4427,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             Server.broadcastPacket(targets, pk);
         } else {
             // legacy协议StartGamePacket中entityRuntimeId=0，需要匹配
-            pk.eid = (this.protocol < ProtocolInfo.v0_16_0) ? 0 : this.id;
+            pk.eid = (ProtocolInfo.isBefore0160(this.protocol)) ? 0 : this.id;
             this.dataPacket(pk);
         }
     }
@@ -4599,7 +4626,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         startGamePacket.levelId = "";
         startGamePacket.worldName = this.getServer().getNetwork().getName();
         startGamePacket.generator = 1; //0 old, 1 infinite, 2 flat
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             startGamePacket.entityUniqueId = 0;
             startGamePacket.entityRuntimeId = 0;
             startGamePacket.b1 = true;
@@ -4613,7 +4640,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         setTimePacket.time = this.level.getTime();
         this.dataPacket(setTimePacket);
 
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             SetSpawnPositionPacket setSpawnPositionPacket = new SetSpawnPositionPacket();
             setSpawnPositionPacket.x = (int) spawnPosition.x;
             setSpawnPositionPacket.y = (int) spawnPosition.y;
@@ -4674,7 +4701,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         this.server.onPlayerLogin(this);
 
-        if (this.protocol < ProtocolInfo.v0_16_0) {
+        if (ProtocolInfo.isBefore0160(this.protocol) && !ProtocolInfo.isBefore0140(this.protocol)) {
             ChunkRadiusUpdatedPacket chunkRadiusUpdatedPacket = new ChunkRadiusUpdatedPacket();
             chunkRadiusUpdatedPacket.radius = this.chunkRadius;
             this.dataPacket(chunkRadiusUpdatedPacket);

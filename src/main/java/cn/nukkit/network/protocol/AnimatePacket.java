@@ -13,7 +13,7 @@ public class AnimatePacket extends DataPacket {
 
     @Override
     public void decode() {
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.action = this.getByte();
             this.eid = this.getLong();
         } else {
@@ -28,7 +28,7 @@ public class AnimatePacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putByte((byte) this.action);
             this.putLong(this.eid);
         } else {

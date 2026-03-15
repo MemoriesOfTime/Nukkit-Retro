@@ -38,7 +38,7 @@ public class UseItemPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if (this.protocol < ProtocolInfo.v0_14_0) {
+        if (ProtocolInfo.isBefore0140(this.protocol)) {
             this.x = this.getInt();
             this.y = this.getInt();
             this.z = this.getInt();
@@ -50,7 +50,7 @@ public class UseItemPacket extends DataPacket {
             this.posY = this.getFloat();
             this.posZ = this.getFloat();
             this.slot = -1;
-        } else if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        } else if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.x = this.getInt();
             this.y = this.getInt();
             this.z = this.getInt();

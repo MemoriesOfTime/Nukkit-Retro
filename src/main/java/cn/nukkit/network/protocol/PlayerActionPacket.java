@@ -38,7 +38,7 @@ public class PlayerActionPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.entityId = this.getLong();
             this.action = this.getInt();
             this.x = this.getInt();
@@ -59,7 +59,7 @@ public class PlayerActionPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putLong(this.entityId);
             this.putInt(this.action);
             this.putInt(this.x);

@@ -24,7 +24,7 @@ public class ChangeDimensionPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putByte((byte) this.dimension);
             this.putFloat(this.x);
             this.putFloat(this.y);

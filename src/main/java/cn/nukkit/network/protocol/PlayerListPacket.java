@@ -2,6 +2,7 @@ package cn.nukkit.network.protocol;
 
 import cn.nukkit.entity.data.Skin;
 
+import java.util.Base64;
 import java.util.UUID;
 
 /**
@@ -26,7 +27,7 @@ public class PlayerListPacket extends DataPacket {
     public void encode() {
         this.reset();
         this.putByte(this.type);
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putInt(this.entries.length);
         } else {
             this.putUnsignedVarInt(this.entries.length);
@@ -34,14 +35,29 @@ public class PlayerListPacket extends DataPacket {
         for (Entry entry : this.entries) {
             if (type == TYPE_ADD) {
                 this.putUUID(entry.uuid);
-                if ((this.protocol < ProtocolInfo.v0_16_0)) {
+                if ((ProtocolInfo.isBefore0160(this.protocol))) {
                     this.putLong(entry.entityId);
                 } else {
                     this.putVarLong(entry.entityId);
                 }
                 this.putString(entry.name);
-                if (this.protocol < ProtocolInfo.v0_13_1) {
+                if (ProtocolInfo.isBefore0130(this.protocol)) {
+                    Skin skin = entry.skin != null ? entry.skin : new Skin(Skin.DEFAULT_SKIN_DATA.clone(), Skin.MODEL_STEVE);
+                    this.putByte((byte) (Skin.MODEL_ALEX.equals(skin.getModel()) ? 1 : 0));
+                    byte[] skinData = skin.getData();
+                    if (skinData.length == Skin.DOUBLE_SKIN_SIZE) {
+                        byte[] singleLayerSkin = new byte[Skin.SINGLE_SKIN_SIZE];
+                        System.arraycopy(skinData, 0, singleLayerSkin, 0, Skin.SINGLE_SKIN_SIZE);
+                        skinData = singleLayerSkin;
+                    }
+                    this.putString(Base64.getEncoder().encodeToString(skinData));
+                } else if (ProtocolInfo.isBefore0131(this.protocol)) {
                     byte[] skinData = entry.skin != null ? entry.skin.getData() : new byte[Skin.SINGLE_SKIN_SIZE];
+                    if (skinData.length == Skin.DOUBLE_SKIN_SIZE) {
+                        byte[] singleLayerSkin = new byte[Skin.SINGLE_SKIN_SIZE];
+                        System.arraycopy(skinData, 0, singleLayerSkin, 0, Skin.SINGLE_SKIN_SIZE);
+                        skinData = singleLayerSkin;
+                    }
                     this.putBoolean(entry.skin != null && Skin.MODEL_ALEX.equals(entry.skin.getModel()));
                     this.putByte((byte) 0);
                     this.putByteArray(skinData);

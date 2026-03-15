@@ -22,7 +22,7 @@ public class MobEquipmentPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.eid = (this.protocol < ProtocolInfo.v0_16_0) ? this.getLong() : this.getVarLong(); //EntityRuntimeID
+        this.eid = (ProtocolInfo.isBefore0160(this.protocol)) ? this.getLong() : this.getVarLong(); //EntityRuntimeID
         this.item = this.getSlot();
         this.slot = this.getByte();
         this.selectedSlot = this.getByte();
@@ -32,7 +32,7 @@ public class MobEquipmentPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putLong(this.eid);
         } else {
             this.putVarLong(this.eid); //EntityRuntimeID

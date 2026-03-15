@@ -12,7 +12,7 @@ public class RequestChunkRadiusPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.radius = (this.protocol < ProtocolInfo.v0_16_0) ? this.getInt() : this.getVarInt();
+        this.radius = (ProtocolInfo.isBefore0160(this.protocol)) ? this.getInt() : this.getVarInt();
     }
 
     @Override

@@ -10,11 +10,7 @@ import cn.nukkit.event.entity.EntityInventoryChangeEvent;
 import cn.nukkit.event.player.PlayerItemHeldEvent;
 import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemBlock;
-import cn.nukkit.network.protocol.ContainerSetContentPacket;
-import cn.nukkit.network.protocol.ContainerSetSlotPacket;
-import cn.nukkit.network.protocol.MobArmorEquipmentPacket;
-import cn.nukkit.network.protocol.MobEquipmentPacket;
-import cn.nukkit.network.protocol.ProtocolInfo;
+import cn.nukkit.network.protocol.*;
 
 import java.util.Collection;
 
@@ -109,7 +105,7 @@ public class PlayerInventory extends BaseInventory {
         Item item = this.getItemInHand();
 
         MobEquipmentPacket pk = new MobEquipmentPacket();
-        pk.eid = player.equals(this.getHolder()) && player.protocol < ProtocolInfo.v0_16_0 ? 0 : this.getHolder().getId();
+        pk.eid = player.equals(this.getHolder()) && ProtocolInfo.isBefore0160(player.protocol) ? 0 : this.getHolder().getId();
         pk.item = item;
         pk.slot = (byte) this.getHeldItemSlot();
         pk.selectedSlot = (byte) this.getHeldItemIndex();
@@ -131,7 +127,7 @@ public class PlayerInventory extends BaseInventory {
         for (Player player : players) {
             pk.eid = this.getHolder().getId();
             if (player.equals(this.getHolder())) {
-                pk.eid = player.protocol < ProtocolInfo.v0_16_0 ? 0 : player.getId();
+                pk.eid = ProtocolInfo.isBefore0160(player.protocol) ? 0 : player.getId();
                 this.sendSlot(this.getHeldItemSlot(), player);
             }
 

@@ -41,7 +41,7 @@ public class LoginPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if (this.protocol < ProtocolInfo.v0_15_0) {
+        if (ProtocolInfo.isBefore0150(this.protocol)) {
             this.username = this.getLegacyString();
             this.clientProtocol = this.getInt();
             this.getInt(); // secondary protocol field, kept for compatibility with old login payload
@@ -78,7 +78,8 @@ public class LoginPacket extends DataPacket {
             if (ProtocolInfo.isLegacyProtocol(this.clientProtocol)) {
                 byte[] str;
                 try {
-                    str = Zlib.inflate(this.get((int) this.getUnsignedVarInt()), 64 * 1024 * 1024);
+                    byte[] compressed = this.get((int) this.getUnsignedVarInt());
+                    str = Zlib.inflateAuto(compressed, 64 * 1024 * 1024);
                 } catch (Exception e) {
                     Server.getInstance().getLogger().error("Failed to decompress login data for legacy protocol " + this.clientProtocol, e);
                     return;
@@ -133,9 +134,36 @@ public class LoginPacket extends DataPacket {
     }
 
     private Skin decodeLegacySkin() {
-        if (this.protocol < ProtocolInfo.v0_13_1) {
+        if (ProtocolInfo.isBefore0130(this.protocol)) {
+            int startOffset = this.getOffset();
             if (this.feof()) {
-                return new Skin(new byte[Skin.SINGLE_SKIN_SIZE], Skin.MODEL_STEVE);
+                return this.createDefaultSkin(Skin.MODEL_STEVE);
+            }
+
+            Skin skin = this.tryDecodeLegacy012SlimSkin(startOffset);
+            if (skin != null) {
+                return skin;
+            }
+
+            this.setOffset(startOffset);
+            skin = this.tryDecodeLegacy012NamedSkin(startOffset);
+            if (skin != null) {
+                if (Nukkit.DEBUG > 1 && Server.getInstance() != null) {
+                    Server.getInstance().getLogger().debug("LoginPacket.decode: detected 0.12 skinName + skin layout for " + this.username);
+                }
+                return skin;
+            }
+
+            this.setOffset(startOffset);
+            if (Nukkit.DEBUG > 1 && Server.getInstance() != null) {
+                Server.getInstance().getLogger().debug("LoginPacket.decode: unable to parse 0.12 skin payload, using default skin for " + this.username);
+            }
+            return this.createDefaultSkin(Skin.MODEL_STEVE);
+        }
+
+        if (ProtocolInfo.isBefore0131(this.protocol)) {
+            if (this.feof()) {
+                return this.createDefaultSkin(Skin.MODEL_STEVE);
             }
 
             boolean slim = this.getBoolean();
@@ -155,6 +183,25 @@ public class LoginPacket extends DataPacket {
             return this.decodeSkinOrDefault(this.get(remaining), skinModel);
         }
 
+        if (remaining == Skin.SINGLE_SKIN_SIZE + 2 || remaining == Skin.DOUBLE_SKIN_SIZE + 2) {
+            int skinLength = this.getShort() & 0xffff;
+            return this.decodeSkinOrDefault(this.get(skinLength), skinModel);
+        }
+
+        if (remaining == Skin.SINGLE_SKIN_SIZE + 4 || remaining == Skin.DOUBLE_SKIN_SIZE + 4) {
+            int intLength = Binary.readInt(Binary.subBytes(this.getBuffer(), this.getOffset(), 4));
+            this.setOffset(this.getOffset() + 4);
+            return this.decodeSkinOrDefault(this.get(intLength), skinModel);
+        }
+
+        if (remaining >= 2) {
+            int shortLength = this.getShort() & 0xffff;
+            if ((shortLength == Skin.SINGLE_SKIN_SIZE || shortLength == Skin.DOUBLE_SKIN_SIZE) && shortLength <= remaining - 2) {
+                return this.decodeSkinOrDefault(this.get(shortLength), skinModel);
+            }
+            this.setOffset(this.getOffset() - 2);
+        }
+
         if (remaining >= 4) {
             int intLength = Binary.readInt(Binary.subBytes(this.getBuffer(), this.getOffset(), 4));
             if ((intLength == Skin.SINGLE_SKIN_SIZE || intLength == Skin.DOUBLE_SKIN_SIZE) && intLength <= remaining - 4) {
@@ -172,11 +219,63 @@ public class LoginPacket extends DataPacket {
         return new String(this.get(this.getShort() & 0xffff), StandardCharsets.UTF_8);
     }
 
+    private Skin tryDecodeLegacy012SlimSkin(int startOffset) {
+        int remaining = Math.max(0, this.getCount() - startOffset);
+        if (remaining < 3) {
+            return null;
+        }
+
+        boolean slim = this.getByte() > 0;
+        byte[] skinBytes = this.readLegacyBytesSafely();
+        if (skinBytes == null || this.getOffset() != this.getCount()) {
+            this.setOffset(startOffset);
+            return null;
+        }
+
+        return this.decodeLegacySkinStringOrDefault(skinBytes, slim ? Skin.MODEL_ALEX : Skin.MODEL_STEVE);
+    }
+
+    private Skin tryDecodeLegacy012NamedSkin(int startOffset) {
+        int remaining = Math.max(0, this.getCount() - startOffset);
+        if (remaining < 4) {
+            return null;
+        }
+
+        byte[] skinModelBytes = this.readLegacyBytesSafely();
+        if (skinModelBytes == null) {
+            this.setOffset(startOffset);
+            return null;
+        }
+
+        byte[] skinBytes = this.readLegacyBytesSafely();
+        if (skinBytes == null || this.getOffset() != this.getCount()) {
+            this.setOffset(startOffset);
+            return null;
+        }
+
+        return this.decodeLegacySkinStringOrDefault(skinBytes, new String(skinModelBytes, StandardCharsets.UTF_8));
+    }
+
+    private byte[] readLegacyBytesSafely() {
+        int remaining = Math.max(0, this.getCount() - this.getOffset());
+        if (remaining < 2) {
+            return null;
+        }
+
+        int length = Binary.readShort(Binary.subBytes(this.getBuffer(), this.getOffset(), 2)) & 0xffff;
+        if (length > remaining - 2) {
+            return null;
+        }
+
+        this.setOffset(this.getOffset() + 2);
+        return this.get(length);
+    }
+
     private Skin decodeSkinOrDefault(String base64Skin, String skinModel) {
         try {
             return new Skin(base64Skin, skinModel);
         } catch (IllegalArgumentException e) {
-            return this.decodeSkinOrDefault(new byte[Skin.SINGLE_SKIN_SIZE], skinModel);
+            return this.decodeSkinOrDefault(Skin.DEFAULT_SKIN_DATA.clone(), skinModel);
         }
     }
 
@@ -184,8 +283,24 @@ public class LoginPacket extends DataPacket {
         try {
             return new Skin(skinData, skinModel);
         } catch (IllegalArgumentException e) {
-            return new Skin(new byte[Skin.SINGLE_SKIN_SIZE], skinModel);
+            return this.createDefaultSkin(skinModel);
         }
+    }
+
+    private Skin decodeLegacySkinStringOrDefault(byte[] skinBytes, String skinModel) {
+        if (skinBytes.length == Skin.SINGLE_SKIN_SIZE || skinBytes.length == Skin.DOUBLE_SKIN_SIZE) {
+            return this.decodeSkinOrDefault(skinBytes, skinModel);
+        }
+
+        try {
+            return new Skin(new String(skinBytes, StandardCharsets.UTF_8), skinModel);
+        } catch (IllegalArgumentException e) {
+            return this.decodeSkinOrDefault(skinBytes, skinModel);
+        }
+    }
+
+    private Skin createDefaultSkin(String skinModel) {
+        return new Skin(Skin.DEFAULT_SKIN_DATA.clone(), skinModel);
     }
 
     @Override

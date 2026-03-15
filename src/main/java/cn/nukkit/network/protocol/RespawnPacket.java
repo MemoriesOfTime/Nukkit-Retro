@@ -15,7 +15,7 @@ public class RespawnPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.x = this.getFloat();
             this.y = this.getFloat();
             this.z = this.getFloat();
@@ -30,7 +30,7 @@ public class RespawnPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putFloat(this.x);
             this.putFloat(this.y);
             this.putFloat(this.z);

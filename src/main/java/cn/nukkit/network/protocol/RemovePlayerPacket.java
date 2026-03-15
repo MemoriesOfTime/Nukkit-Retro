@@ -6,9 +6,9 @@ import cn.nukkit.network.protocol.ProtocolInfo.UnsupportedSince;
 import java.util.UUID;
 
 /**
- * 仅用于 0.13.x - 0.14.x 客户端的人形实体移除包。
+ * 仅用于 0.12.x - 0.14.x 客户端的人形实体移除包。
  */
-@SinceProtocol(ProtocolInfo.v0_13_0)
+@SinceProtocol(ProtocolInfo.v0_12_0)
 @UnsupportedSince(ProtocolInfo.v0_15_0)
 public class RemovePlayerPacket extends DataPacket {
 

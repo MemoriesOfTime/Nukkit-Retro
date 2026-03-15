@@ -21,7 +21,7 @@ public class FullChunkDataPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.chunkX = this.getInt();
             this.chunkZ = this.getInt();
             this.order = (byte) this.getByte();
@@ -36,7 +36,7 @@ public class FullChunkDataPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putInt(this.chunkX);
             this.putInt(this.chunkZ);
             this.putByte(this.order);

@@ -29,6 +29,7 @@ import cn.nukkit.level.format.LevelProvider;
 import cn.nukkit.level.format.anvil.Anvil;
 import cn.nukkit.level.format.generic.BaseFullChunk;
 import cn.nukkit.level.format.generic.BaseLevelProvider;
+import cn.nukkit.level.format.generic.ChunkConverter;
 import cn.nukkit.level.format.generic.EmptyChunkSection;
 import cn.nukkit.level.format.leveldb.LevelDB;
 import cn.nukkit.level.format.mcregion.McRegion;
@@ -38,7 +39,6 @@ import cn.nukkit.level.particle.DestroyBlockParticle;
 import cn.nukkit.level.particle.Particle;
 import cn.nukkit.level.sound.BlockPlaceSound;
 import cn.nukkit.level.sound.Sound;
-import cn.nukkit.network.protocol.FullChunkDataPacket;
 import cn.nukkit.math.*;
 import cn.nukkit.math.BlockFace.Plane;
 import cn.nukkit.metadata.BlockMetadataStore;
@@ -3230,18 +3230,28 @@ public class Level implements ChunkManager, Metadatable {
     }
 
     /**
-     * 为 0.14/0.15 旧版客户端构建 Anvil 区块的 ORDER_LAYERED 格式数据。
-     * 将子区块数组按 section 顺序拼接（与 PHP Genisys Anvil 行为一致）。
-     * 仅对 section-based 区块（Anvil）生效，McRegion/LevelDB 返回 null。
+     * 为 0.12 - 0.15 旧版客户端构建 ORDER_LAYERED 格式区块数据。
+     * 对于非 section-based 的 McRegion / LevelDB 区块，会先转换为 8 层 Anvil 视图后再序列化。
      */
     public byte[] buildLegacyChunkPayload(int x, int z) {
         FullChunk fullChunk = this.getChunk(x, z, true);
-        if (fullChunk == null || !(fullChunk instanceof Chunk)) {
+        if (fullChunk == null) {
             return null;
         }
 
-        Chunk chunk = (Chunk) fullChunk;
-        ChunkSection[] sections = chunk.getSections();
+        cn.nukkit.level.format.anvil.Chunk legacyChunk;
+        if (fullChunk instanceof cn.nukkit.level.format.anvil.Chunk) {
+            legacyChunk = (cn.nukkit.level.format.anvil.Chunk) fullChunk;
+        } else if (fullChunk instanceof BaseFullChunk) {
+            legacyChunk = (cn.nukkit.level.format.anvil.Chunk) new ChunkConverter(fullChunk.getProvider())
+                    .from((BaseFullChunk) fullChunk)
+                    .to(cn.nukkit.level.format.anvil.Chunk.class)
+                    .perform();
+        } else {
+            return null;
+        }
+
+        ChunkSection[] sections = legacyChunk.getSections();
         int sectionCount = 8; // 128 高度，旧版客户端仅支持 8 个子区块
 
         BinaryStream stream = new BinaryStream();
@@ -3267,17 +3277,17 @@ public class Level implements ChunkManager, Metadatable {
         }
 
         // Height map: 256 bytes
-        for (int height : fullChunk.getHeightMapArray()) {
+        for (int height : legacyChunk.getHeightMapArray()) {
             stream.putByte((byte) height);
         }
 
         // Biome colors: 256 × 4 bytes (big-endian)
-        for (int color : fullChunk.getBiomeColorArray()) {
+        for (int color : legacyChunk.getBiomeColorArray()) {
             stream.put(Binary.writeInt(color));
         }
 
         // Extra data
-        Map<Integer, Integer> extra = fullChunk.getBlockExtraDataArray();
+        Map<Integer, Integer> extra = legacyChunk.getBlockExtraDataArray();
         if (!extra.isEmpty()) {
             stream.putLInt(extra.size());
             for (Map.Entry<Integer, Integer> entry : extra.entrySet()) {
@@ -3289,9 +3299,9 @@ public class Level implements ChunkManager, Metadatable {
         }
 
         // Block entities NBT
-        if (!fullChunk.getBlockEntities().isEmpty()) {
+        if (!legacyChunk.getBlockEntities().isEmpty()) {
             List<CompoundTag> tagList = new ArrayList<>();
-            for (BlockEntity blockEntity : fullChunk.getBlockEntities().values()) {
+            for (BlockEntity blockEntity : legacyChunk.getBlockEntities().values()) {
                 if (blockEntity instanceof BlockEntitySpawnable) {
                     tagList.add(((BlockEntitySpawnable) blockEntity).getSpawnCompound());
                 }
@@ -3300,6 +3310,101 @@ public class Level implements ChunkManager, Metadatable {
                 stream.put(NBTIO.write(tagList, java.nio.ByteOrder.LITTLE_ENDIAN));
             } catch (IOException e) {
                 throw new RuntimeException(e);
+            }
+        }
+
+        return stream.getBuffer();
+    }
+
+    /**
+     * 为 0.12.x 客户端构建 ORDER_COLUMNS 格式区块数据。
+     * 旧客户端仅支持 128 高度，因此会裁剪到 Y=0-127。
+     */
+    public byte[] buildLegacyColumnChunkPayload(int x, int z) {
+        FullChunk fullChunk = this.getChunk(x, z, true);
+        if (fullChunk == null) {
+            return null;
+        }
+
+        BinaryStream stream = new BinaryStream();
+
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
+                for (int y = 0; y < 128; y++) {
+                    stream.putByte((byte) fullChunk.getBlockId(localX, y, localZ));
+                }
+            }
+        }
+
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
+                for (int y = 0; y < 128; y += 2) {
+                    int low = fullChunk.getBlockData(localX, y, localZ) & 0x0f;
+                    int high = fullChunk.getBlockData(localX, y + 1, localZ) & 0x0f;
+                    stream.putByte((byte) (low | (high << 4)));
+                }
+            }
+        }
+
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
+                for (int y = 0; y < 128; y += 2) {
+                    int low = fullChunk.getBlockSkyLight(localX, y, localZ) & 0x0f;
+                    int high = fullChunk.getBlockSkyLight(localX, y + 1, localZ) & 0x0f;
+                    stream.putByte((byte) (low | (high << 4)));
+                }
+            }
+        }
+
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
+                for (int y = 0; y < 128; y += 2) {
+                    int low = fullChunk.getBlockLight(localX, y, localZ) & 0x0f;
+                    int high = fullChunk.getBlockLight(localX, y + 1, localZ) & 0x0f;
+                    stream.putByte((byte) (low | (high << 4)));
+                }
+            }
+        }
+
+        for (int height : fullChunk.getHeightMapArray()) {
+            stream.putByte((byte) Math.max(0, Math.min(height, 127)));
+        }
+
+        for (int color : fullChunk.getBiomeColorArray()) {
+            stream.put(Binary.writeInt(color));
+        }
+
+        Map<Integer, Integer> extra = fullChunk.getBlockExtraDataArray();
+        int extraCount = 0;
+        for (Map.Entry<Integer, Integer> entry : extra.entrySet()) {
+            if ((entry.getKey() & 0xff) < 128) {
+                extraCount++;
+            }
+        }
+
+        stream.putLInt(extraCount);
+        if (extraCount > 0) {
+            for (Map.Entry<Integer, Integer> entry : extra.entrySet()) {
+                if ((entry.getKey() & 0xff) < 128) {
+                    stream.putLInt(entry.getKey());
+                    stream.putLShort(entry.getValue());
+                }
+            }
+        }
+
+        if (!fullChunk.getBlockEntities().isEmpty()) {
+            List<CompoundTag> tagList = new ArrayList<>();
+            for (BlockEntity blockEntity : fullChunk.getBlockEntities().values()) {
+                if (blockEntity instanceof BlockEntitySpawnable && blockEntity.getFloorY() < 128) {
+                    tagList.add(((BlockEntitySpawnable) blockEntity).getSpawnCompound());
+                }
+            }
+            if (!tagList.isEmpty()) {
+                try {
+                    stream.put(NBTIO.write(tagList, java.nio.ByteOrder.LITTLE_ENDIAN));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
             }
         }
 

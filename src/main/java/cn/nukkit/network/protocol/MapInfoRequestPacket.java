@@ -13,7 +13,7 @@ public class MapInfoRequestPacket extends DataPacket {
 
     @Override
     public void decode() {
-        mapId = this.getVarLong();
+        mapId = (ProtocolInfo.isBefore0160(this.protocol)) ? this.getLong() : this.getVarLong();
     }
 
     @Override

@@ -23,13 +23,13 @@ public class SetTimePacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putInt(this.time);
             this.putByte((byte) (this.started ? 1 : 0));
         } else {
             this.putVarInt(this.time);
         }
-        if (ProtocolInfo.isLegacyProtocol(this.protocol) && !(this.protocol < ProtocolInfo.v0_16_0)) {
+        if (ProtocolInfo.isLegacyProtocol(this.protocol) && !(ProtocolInfo.isBefore0160(this.protocol))) {
             this.putBoolean(this.started);
         }
     }

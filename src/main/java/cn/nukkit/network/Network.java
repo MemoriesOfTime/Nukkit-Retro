@@ -34,6 +34,7 @@ public class Network {
     public static final byte CHANNEL_END = 31;
 
     private PacketPool packetPool60;
+    private PacketPool packetPool34;
     private PacketPool packetPool39;
     private PacketPool packetPool81;
     private PacketPool packetPool84;
@@ -150,7 +151,7 @@ public class Network {
     public void processBatch(BatchPacket packet, Player player) {
         byte[] data;
         try {
-            data = Zlib.inflate(packet.payload, 64 * 1024 * 1024);
+            data = this.inflateBatchPayload(packet.payload, player);
         } catch (Exception e) {
             if (Nukkit.DEBUG > 1) {
                 this.server.getLogger().debug("Failed to inflate BatchPacket" + (player != null ? " from " + player.getName() : ""));
@@ -171,12 +172,30 @@ public class Network {
             if (Nukkit.DEBUG > 1) {
                 this.server.getLogger().debug("Pre-detected protocol " + protocol + " from batch data" + (player != null ? " for " + player.getAddress() : ""));
             }
+            if (this.server != null && protocol == ProtocolInfo.CURRENT_PROTOCOL && this.looksLikeLegacyBatchData(data, len)) {
+                this.server.getLogger().notice("Failed to pre-detect legacy batch protocol"
+                        + (player != null ? " for " + player.getAddress() : "")
+                        + ", head=0x" + Binary.bytesToHexString(Binary.subBytes(data, 0, Math.min(len, 16))));
+            }
+        }
+
+        if (ProtocolInfo.isBefore0130(protocol)) {
+            try {
+                List<DataPacket> packets = this.decodeLegacy012Batch(data, len, player, protocol);
+                processPackets(player, packets);
+            } catch (Exception e) {
+                if (Nukkit.DEBUG > 0) {
+                    this.server.getLogger().debug("BatchPacket 0x" + Binary.bytesToHexString(packet.payload));
+                    this.server.getLogger().logException(e);
+                }
+            }
+            return;
         }
 
         if (ProtocolInfo.isBefore0160(protocol)) {
             // 0.13.x ~ 0.15.x: 内部包使用4字节大端 int 长度前缀
             int offset = 0;
-            boolean isClassicLegacy = protocol < ProtocolInfo.v0_15_0;
+            boolean isClassicLegacy = ProtocolInfo.isBefore0150(protocol);
             try {
                 List<DataPacket> packets = new ArrayList<>();
                 while (offset < len) {
@@ -351,11 +370,92 @@ public class Network {
     }
 
     /**
+     * 尝试解压批量包数据，自动检测 zlib / raw deflate 格式。
+     * 某些客户端的 payload 格式为 [packet_count:VarInt][zlib_data]
+     */
+    private byte[] inflateBatchPayload(byte[] payload, Player player) throws Exception {
+        // 首先尝试直接解压（标准情况）
+        if (Zlib.hasZlibHeader(payload)) {
+            try {
+                return Zlib.inflate(payload, 64 * 1024 * 1024);
+            } catch (Exception ignored) {
+                // 如果标准 zlib 失败，继续尝试其他格式
+            }
+        }
+
+        // 尝试 raw deflate
+        try {
+            byte[] result = Zlib.inflateRaw(payload, 64 * 1024 * 1024);
+            if (player != null) {
+                player.useRawDeflate = true;
+            }
+            return result;
+        } catch (Exception rawFailed) {
+            // 如果第一个字节看起来像单字节 VarInt（< 0x80）且不是 zlib 头，
+            // 尝试跳过一个字节（可能是数据包计数）
+            if (payload.length > 1 && (payload[0] & 0xff) < 0x80 && !Zlib.hasZlibHeader(payload)) {
+                byte[] shifted = Binary.subBytes(payload, 1);
+                if (Zlib.hasZlibHeader(shifted)) {
+                    try {
+                        return Zlib.inflate(shifted, 64 * 1024 * 1024);
+                    } catch (Exception ignored) {
+                    }
+                }
+                try {
+                    return Zlib.inflateRaw(shifted, 64 * 1024 * 1024);
+                } catch (Exception ignored) {
+                }
+            }
+
+            this.server.getLogger().warning("Failed to inflate batch payload"
+                    + (player != null ? " from " + player.getAddress() + " protocol=" + player.protocol : "")
+                    + " length=" + payload.length
+                    + " head=0x" + Binary.bytesToHexString(Binary.subBytes(payload, 0, Math.min(payload.length, 16))));
+            throw rawFailed;
+        }
+    }
+
+    /**
      * 当协议版本未知时，从批量包解压数据中预检测协议版本。
-     * 先尝试 0.15.x+ 格式（VarInt 长度前缀），再尝试 0.14.x 格式（4字节 int 长度前缀）。
      */
     private @SupportedProtocol int detectProtocolFromBatchData(byte[] data, int len) {
-        // 先尝试 0.16.0+ 格式：VarInt 长度 + [packetID, clientProtocol, ...]
+        // 尝试 0.12.x 原始串联格式：[0x8f][username_short][username...][protocol_int]
+        if (len >= 7 && (data[0] & 0xff) == 0x8f) {
+            try {
+                int usernameLength = Binary.readShort(Binary.subBytes(data, 1, 2)) & 0xffff;
+                int protocolOffset = 3 + usernameLength;
+                if (protocolOffset + 4 <= len) {
+                    int clientProtocol = Binary.readInt(Binary.subBytes(data, protocolOffset, 4));
+                    if (ProtocolInfo.isSupportedProtocol(clientProtocol) && clientProtocol < ProtocolInfo.v0_13_0) {
+                        return clientProtocol;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // 再尝试 0.12.x 带内部长度前缀的经典批量格式：int32 长度 + [0x8f][username_short][...][protocol_int]
+        if (len >= 11) {
+            try {
+                int pkLen = Binary.readInt(Binary.subBytes(data, 0, 4));
+                if (pkLen > 0 && pkLen <= len - 4) {
+                    byte[] buf = Binary.subBytes(data, 4, pkLen);
+                    if (buf.length >= 7 && (buf[0] & 0xff) == 0x8f) {
+                        int usernameLength = Binary.readShort(Binary.subBytes(buf, 1, 2)) & 0xffff;
+                        int protocolOffset = 3 + usernameLength;
+                        if (protocolOffset + 4 <= buf.length) {
+                            int clientProtocol = Binary.readInt(Binary.subBytes(buf, protocolOffset, 4));
+                            if (ProtocolInfo.isSupportedProtocol(clientProtocol) && clientProtocol < ProtocolInfo.v0_13_0) {
+                                return clientProtocol;
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // 尝试 0.16.0+ 格式：VarInt 长度 + [packetID, clientProtocol, ...]
         try {
             BinaryStream stream = new BinaryStream(data);
             byte[] buf = stream.getByteArray();
@@ -428,6 +528,173 @@ public class Network {
         return ProtocolInfo.CURRENT_PROTOCOL;
     }
 
+    private boolean looksLikeLegacyBatchData(byte[] data, int len) {
+        if (len <= 0) {
+            return false;
+        }
+
+        int first = data[0] & 0xff;
+        if (first == 0x8f || first == 0x8e) {
+            return true;
+        }
+
+        if (len >= 5) {
+            try {
+                int pkLen = Binary.readInt(Binary.subBytes(data, 0, 4));
+                if (pkLen > 0 && pkLen <= len - 4) {
+                    int packetId = data[4] & 0xff;
+                    return packetId == 0x8f || packetId == 0x8e;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        return false;
+    }
+
+    private List<DataPacket> decodeLegacy012Batch(byte[] data, int len, Player player, @SupportedProtocol int protocol) {
+        List<DataPacket> packets = new ArrayList<>();
+        boolean lengthPrefixed = this.usesLengthPrefixedLegacy012Batch(data, len, protocol);
+        if (player != null && ProtocolInfo.isBefore0130(protocol)) {
+            player.setLegacy012LengthPrefixedBatch(lengthPrefixed);
+        }
+        int offset = 0;
+        @SupportedProtocol int currentProtocol = protocol;
+
+        while (offset < len) {
+            if (lengthPrefixed) {
+                if (offset + 4 > len) {
+                    break;
+                }
+
+                int framedOffset = offset;
+                int pkLen = Binary.readInt(Binary.subBytes(data, offset, 4));
+                offset += 4;
+                if (pkLen <= 0 || pkLen > len - offset) {
+                    this.logLegacy012MalformedFrame(player, framedOffset, pkLen, currentProtocol);
+                    break;
+                }
+
+                byte[] buf = Binary.subBytes(data, offset, pkLen);
+                offset += pkLen;
+                if (buf.length < 1) {
+                    continue;
+                }
+
+                int packetId = buf[0] & 0xff;
+                @SupportedProtocol int pktProtocol = this.resolveLegacy012PacketProtocol(packetId, buf, 1, buf.length, currentProtocol, player);
+                DataPacket pk = this.getPacket(packetId, pktProtocol);
+                if (pk == null) {
+                    this.logUnknownLegacy012BatchPacket(player, packetId, framedOffset, pktProtocol, true);
+                    break;
+                }
+                if (pk.pid() == ProtocolInfo.BATCH_PACKET) {
+                    throw new IllegalStateException("Invalid BatchPacket inside BatchPacket");
+                }
+
+                pk.protocol = pktProtocol;
+                pk.setBuffer(buf, 1);
+                pk.decode();
+                packets.add(pk);
+                currentProtocol = pktProtocol;
+                continue;
+            }
+
+            int packetOffset = offset;
+            int packetId = data[offset++] & 0xff;
+            @SupportedProtocol int pktProtocol = this.resolveLegacy012PacketProtocol(packetId, data, offset, len, currentProtocol, player);
+
+            DataPacket pk = this.getPacket(packetId, pktProtocol);
+            if (pk == null) {
+                this.logUnknownLegacy012BatchPacket(player, packetId, packetOffset, pktProtocol, false);
+                break;
+            }
+            if (pk.pid() == ProtocolInfo.BATCH_PACKET) {
+                throw new IllegalStateException("Invalid BatchPacket inside BatchPacket");
+            }
+
+            pk.protocol = pktProtocol;
+            pk.setBuffer(data, offset);
+            pk.decode();
+            packets.add(pk);
+
+            int nextOffset = pk.getOffset();
+            if (nextOffset <= offset) {
+                break;
+            }
+            offset = nextOffset;
+            currentProtocol = pktProtocol;
+        }
+
+        return packets;
+    }
+
+    private boolean usesLengthPrefixedLegacy012Batch(byte[] data, int len, @SupportedProtocol int protocol) {
+        if (len < 5) {
+            return false;
+        }
+
+        int firstPacketId = data[0] & 0xff;
+        if (firstPacketId >= 0x8f && this.getPacket(firstPacketId, protocol) != null) {
+            return false;
+        }
+
+        try {
+            int pkLen = Binary.readInt(Binary.subBytes(data, 0, 4));
+            if (pkLen <= 0 || pkLen > len - 4) {
+                return false;
+            }
+
+            int framedPacketId = data[4] & 0xff;
+            return framedPacketId >= 0x8f && this.getPacket(framedPacketId, protocol) != null;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private @SupportedProtocol int resolveLegacy012PacketProtocol(int packetId, byte[] data, int offset, int len, @SupportedProtocol int currentProtocol, Player player) {
+        @SupportedProtocol int pktProtocol = currentProtocol;
+        if (packetId == 0x8f && offset + 2 <= len) {
+            int usernameLength = Binary.readShort(Binary.subBytes(data, offset, 2)) & 0xffff;
+            int protocolOffset = offset + 2 + usernameLength;
+            if (protocolOffset + 4 <= len) {
+                int clientProtocol = Binary.readInt(Binary.subBytes(data, protocolOffset, 4));
+                if (ProtocolInfo.isSupportedProtocol(clientProtocol) && clientProtocol < ProtocolInfo.v0_13_0) {
+                    pktProtocol = clientProtocol;
+                    if (player != null && player.protocol == Integer.MAX_VALUE) {
+                        player.protocol = clientProtocol;
+                    }
+                }
+            }
+        }
+
+        return pktProtocol;
+    }
+
+    private void logUnknownLegacy012BatchPacket(Player player, int packetId, int offset, @SupportedProtocol int protocol, boolean lengthPrefixed) {
+        if (this.server == null) {
+            return;
+        }
+
+        this.server.getLogger().notice("Unknown 0.12 " + (lengthPrefixed ? "length-prefixed " : "") + "batch packet id 0x"
+                + Integer.toHexString(packetId)
+                + (player != null ? " from " + player.getAddress() : "")
+                + ", offset=" + offset
+                + ", protocol=" + protocol);
+    }
+
+    private void logLegacy012MalformedFrame(Player player, int offset, int pkLen, @SupportedProtocol int protocol) {
+        if (this.server == null) {
+            return;
+        }
+
+        this.server.getLogger().notice("Malformed 0.12 length-prefixed batch frame"
+                + (player != null ? " from " + player.getAddress() : "")
+                + ", offset=" + offset
+                + ", frameLength=" + pkLen
+                + ", protocol=" + protocol);
+    }
+
     public DataPacket getPacket(int id, @SupportedProtocol int protocol) {
         PacketPool pool = this.getPacketPool(protocol);
         return pool == null ? null : pool.getPacket(id);
@@ -435,6 +702,8 @@ public class Network {
 
     public PacketPool getPacketPool(@SupportedProtocol int protocol) {
         switch (ProtocolInfo.getPacketPoolProtocol(protocol)) {
+            case ProtocolInfo.v0_12_1:
+                return this.packetPool34;
             case ProtocolInfo.v0_13_2:
                 return this.packetPool39;
             case ProtocolInfo.v0_14_2:
@@ -463,6 +732,9 @@ public class Network {
 
     public void setPacketPool(@SupportedProtocol int protocol, PacketPool packetPool) {
         switch (ProtocolInfo.getPacketPoolProtocol(protocol)) {
+            case ProtocolInfo.v0_12_1:
+                this.packetPool34 = packetPool;
+                break;
             case ProtocolInfo.v0_13_2:
                 this.packetPool39 = packetPool;
                 break;
@@ -627,6 +899,14 @@ public class Network {
                 .deregisterPacket(0xc9)
                 .deregisterPacket(0xca)
                 .deregisterPacket(0xcb)
+                .build();
+        this.packetPool34 = this.packetPool39.toBuilder()
+                .protocolVersion(ProtocolInfo.v0_12_1)
+                .minecraftVersion(ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_12_1))
+                .deregisterPacket(0xbe)
+                .deregisterPacket(0xc1)
+                .deregisterPacket(0xc2)
+                .deregisterPacket(0xc5)
                 .build();
         this.packetPool81 = pool81.build();
         this.packetPool84 = pool84.build();

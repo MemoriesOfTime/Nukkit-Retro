@@ -37,7 +37,7 @@ public abstract class DataPacket extends BinaryStream implements Cloneable {
 
     @Override
     public byte[] getByteArray() {
-        if (this.protocol < ProtocolInfo.v0_15_0) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             return this.get(this.getShort() & 0xffff);
         }
         return super.getByteArray();
@@ -45,7 +45,7 @@ public abstract class DataPacket extends BinaryStream implements Cloneable {
 
     @Override
     public void putByteArray(byte[] b) {
-        if (this.protocol < ProtocolInfo.v0_15_0) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.putShort(b.length);
             this.put(b);
             return;
@@ -65,7 +65,10 @@ public abstract class DataPacket extends BinaryStream implements Cloneable {
 
     @Override
     public Item getSlot() {
-        if (this.protocol < ProtocolInfo.v0_15_0) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
+            if (this.feof()) {
+                return Item.get(0, 0, 0);
+            }
             int id = this.getShort();
             if (id <= 0) {
                 return Item.get(0, 0, 0);
@@ -83,7 +86,7 @@ public abstract class DataPacket extends BinaryStream implements Cloneable {
 
     @Override
     public void putSlot(Item item) {
-        if (this.protocol < ProtocolInfo.v0_15_0) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             if (item == null || item.getId() == 0) {
                 this.putShort(0);
                 return;

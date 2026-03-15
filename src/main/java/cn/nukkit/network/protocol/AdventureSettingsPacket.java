@@ -38,7 +38,7 @@ public class AdventureSettingsPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if (this.protocol < ProtocolInfo.v0_15_0) {
+        if (ProtocolInfo.isBefore0150(this.protocol)) {
             this.flags = this.getInt();
             this.userPermission = this.getInt();
             this.globalPermission = this.getInt();
@@ -56,7 +56,7 @@ public class AdventureSettingsPacket extends DataPacket {
             return;
         }
 
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.flags = this.getInt();
             this.userPermission = this.getInt();
             this.globalPermission = this.getInt();
@@ -81,7 +81,7 @@ public class AdventureSettingsPacket extends DataPacket {
     public void encode() {
         this.reset();
         this.flags = 0;
-        if (this.protocol < ProtocolInfo.v0_15_0) {
+        if (ProtocolInfo.isBefore0150(this.protocol)) {
             if (this.worldImmutable) this.flags |= 0x01;
             if (this.autoJump) this.flags |= 0x40;
             if (this.allowFlight) this.flags |= 0x80;
@@ -104,7 +104,7 @@ public class AdventureSettingsPacket extends DataPacket {
         if (this.worldBuilder) this.flags |= 1 << 8;
         if (this.isFlying) this.flags |= 1 << 9;
         if (!ProtocolInfo.isLegacyProtocol(this.protocol) && this.muted) this.flags |= 1 << 10;
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putInt(this.flags);
             this.putInt(this.userPermission);
             this.putInt(this.globalPermission);

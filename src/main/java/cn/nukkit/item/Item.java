@@ -1531,6 +1531,13 @@ public class Item implements Cloneable {
             return protocolCreativeItems;
         }
 
+        if (poolProtocol == ProtocolInfo.v0_12_1) {
+            ArrayList<Item> classicCreativeItems = Item.creativeByProtocol.get(ProtocolInfo.v0_13_2);
+            if (classicCreativeItems != null) {
+                return classicCreativeItems;
+            }
+        }
+
         if (poolProtocol == ProtocolInfo.CURRENT_PROTOCOL) {
             return Item.creative;
         }
@@ -2122,7 +2129,7 @@ public class Item implements Cloneable {
     }
 
     public boolean isSupportedOn(int protocolId) {
-        return protocolId >= ProtocolInfo.v0_13_0;
+        return protocolId >= ProtocolInfo.v0_12_0;
     }
 
     public boolean isUnbreakable() {

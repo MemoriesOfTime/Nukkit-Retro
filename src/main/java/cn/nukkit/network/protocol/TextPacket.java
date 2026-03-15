@@ -48,7 +48,7 @@ public class TextPacket extends DataPacket {
 
             case TYPE_TRANSLATION:
                 this.message = this.getString();
-                int count = (this.protocol < ProtocolInfo.v0_16_0) ? this.getByte() : (int) this.getUnsignedVarInt();
+                int count = (ProtocolInfo.isBefore0160(this.protocol)) ? this.getByte() : (int) this.getUnsignedVarInt();
                 this.parameters = new String[count];
                 for (int i = 0; i < count; i++) {
                     this.parameters[i] = this.getString();
@@ -63,7 +63,7 @@ public class TextPacket extends DataPacket {
         if (ProtocolInfo.isLegacyProtocol(this.protocol) && type == TYPE_ANNOUNCEMENT) {
             type = TYPE_SYSTEM;
         }
-        if ((this.protocol < ProtocolInfo.v0_16_0) && (type == TYPE_WHISPER || type == TYPE_ANNOUNCEMENT)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol)) && (type == TYPE_WHISPER || type == TYPE_ANNOUNCEMENT)) {
             type = TYPE_SYSTEM;
         }
         this.putByte(type);
@@ -86,7 +86,7 @@ public class TextPacket extends DataPacket {
 
             case TYPE_TRANSLATION:
                 this.putString(this.message);
-                if ((this.protocol < ProtocolInfo.v0_16_0)) {
+                if ((ProtocolInfo.isBefore0160(this.protocol))) {
                     this.putByte((byte) this.parameters.length);
                 } else {
                     this.putUnsignedVarInt(this.parameters.length);

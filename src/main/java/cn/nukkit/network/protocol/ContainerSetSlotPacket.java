@@ -23,7 +23,7 @@ public class ContainerSetSlotPacket extends DataPacket {
     @Override
     public void decode() {
         this.windowid = this.getByte();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.slot = this.getShort();
             this.hotbarSlot = this.getShort();
         } else {
@@ -31,14 +31,14 @@ public class ContainerSetSlotPacket extends DataPacket {
             this.hotbarSlot = this.getVarInt();
         }
         this.item = this.getSlot();
-        this.selectedSlot = (this.protocol < ProtocolInfo.v0_16_0) || this.feof() ? 0 : this.getByte();
+        this.selectedSlot = (ProtocolInfo.isBefore0160(this.protocol)) || this.feof() ? 0 : this.getByte();
     }
 
     @Override
     public void encode() {
         this.reset();
         this.putByte((byte) this.windowid);
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putShort(this.slot);
             this.putShort(this.hotbarSlot);
         } else {
@@ -46,7 +46,7 @@ public class ContainerSetSlotPacket extends DataPacket {
             this.putVarInt(this.hotbarSlot);
         }
         this.putSlot(this.item);
-        if (!(this.protocol < ProtocolInfo.v0_16_0)) {
+        if (!(ProtocolInfo.isBefore0160(this.protocol))) {
             this.putByte((byte) this.selectedSlot);
         }
     }

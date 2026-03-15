@@ -23,7 +23,7 @@ public class SetEntityLinkPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putLong(this.rider);
             this.putLong(this.riding);
         } else {

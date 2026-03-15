@@ -14,6 +14,10 @@ import java.util.List;
  */
 public interface ProtocolInfo {
 
+    @ApiStatus.AvailableSince("0.12.0")
+    int v0_12_0 = 28;
+    @ApiStatus.AvailableSince("0.12.1")
+    int v0_12_1 = 34;
     @ApiStatus.AvailableSince("0.13.0")
     int v0_13_0 = 37;
     @ApiStatus.AvailableSince("0.13.1")
@@ -64,6 +68,8 @@ public interface ProtocolInfo {
     int CURRENT_PROTOCOL = v1_1_0;
 
     List<Integer> SUPPORTED_PROTOCOLS = Collections.unmodifiableList(Arrays.asList(
+            v0_12_0,
+            v0_12_1,
             v0_13_0,
             v0_13_1,
             v0_13_2,
@@ -92,6 +98,9 @@ public interface ProtocolInfo {
     @SupportedProtocol
     static int getPacketPoolProtocol(int protocol) {
         switch (protocol) {
+            case v0_12_0:
+            case v0_12_1:
+                return v0_12_1;
             case v0_13_0:
             case v0_13_1:
             case v0_13_2:
@@ -252,12 +261,32 @@ public interface ProtocolInfo {
         return protocol < v1_1_0;
     }
 
+    static boolean isBefore0130(int protocol) {
+        return protocol < v0_13_0;
+    }
+
+    static boolean isBefore0131(int protocol) {
+        return protocol < v0_13_1;
+    }
+
+    static boolean isBefore0140(int protocol) {
+        return protocol < v0_14_0;
+    }
+
+    static boolean isBefore0150(int protocol) {
+        return protocol < v0_15_0;
+    }
+
     static boolean isBefore0160(int protocol) {
         return protocol < v0_16_0;
     }
 
     static String getMinecraftVersion(@SupportedProtocol int protocol) {
         switch (protocol) {
+            case v0_12_0:
+                return "0.12.0";
+            case v0_12_1:
+                return "0.12.3";
             case v0_13_0:
                 return "0.13.0";
             case v0_13_1:
@@ -309,6 +338,8 @@ public interface ProtocolInfo {
     @Retention(RetentionPolicy.SOURCE)
     @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.LOCAL_VARIABLE, ElementType.METHOD})
     @MagicConstant(intValues = {
+            v0_12_0,
+            v0_12_1,
             v0_13_0,
             v0_13_1,
             v0_13_2,

@@ -19,7 +19,7 @@ public class MobArmorEquipmentPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.eid = (this.protocol < ProtocolInfo.v0_16_0) ? this.getLong() : this.getVarLong();
+        this.eid = (ProtocolInfo.isBefore0160(this.protocol)) ? this.getLong() : this.getVarLong();
         this.slots = new Item[4];
         this.slots[0] = this.getSlot();
         this.slots[1] = this.getSlot();
@@ -30,7 +30,7 @@ public class MobArmorEquipmentPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((this.protocol < ProtocolInfo.v0_16_0)) {
+        if ((ProtocolInfo.isBefore0160(this.protocol))) {
             this.putLong(this.eid);
         } else {
             this.putVarLong(this.eid);

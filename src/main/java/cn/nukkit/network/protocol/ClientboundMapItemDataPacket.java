@@ -42,7 +42,11 @@ public class ClientboundMapItemDataPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putVarLong(mapId);
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
+            this.putLong(mapId);
+        } else {
+            this.putVarLong(mapId);
+        }
 
         int update = 0;
         if (eids.length > 0) {
@@ -56,10 +60,14 @@ public class ClientboundMapItemDataPacket extends DataPacket {
         }
         this.putUnsignedVarInt(update);
 
-        if ((update & 0x08) != 0) { //TODO: find out what these are for
+        if ((update & 0x08) != 0) {
             this.putUnsignedVarInt(eids.length);
             for (int eid : eids) {
-                this.putVarInt(eid);
+                if (ProtocolInfo.isBefore0160(this.protocol)) {
+                    this.putLong(eid);
+                } else {
+                    this.putVarInt(eid);
+                }
             }
         }
         if ((update & (TEXTURE_UPDATE | DECORATIONS_UPDATE)) != 0) {

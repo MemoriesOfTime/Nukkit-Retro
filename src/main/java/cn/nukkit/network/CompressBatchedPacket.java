@@ -18,6 +18,7 @@ public class CompressBatchedPacket extends AsyncTask {
     public byte[] finalData;
     public int channel = 0;
     public List<String> targets = new ArrayList<>();
+    public boolean rawDeflate = false;
 
     public CompressBatchedPacket(byte[] data, List<String> targets) {
         this(data, targets, 7);
@@ -28,16 +29,21 @@ public class CompressBatchedPacket extends AsyncTask {
     }
 
     public CompressBatchedPacket(byte[] data, List<String> targets, int level, int channel) {
+        this(data, targets, level, channel, false);
+    }
+
+    public CompressBatchedPacket(byte[] data, List<String> targets, int level, int channel, boolean rawDeflate) {
         this.data = data;
         this.targets = targets;
         this.level = level;
         this.channel = channel;
+        this.rawDeflate = rawDeflate;
     }
 
     @Override
     public void onRun() {
         try {
-            this.finalData = Zlib.deflate(data, level);
+            this.finalData = this.rawDeflate ? Zlib.deflateRaw(data, level) : Zlib.deflate(data, level);
             this.data = null;
         } catch (Exception e) {
             //ignore

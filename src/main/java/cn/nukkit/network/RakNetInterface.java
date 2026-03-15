@@ -242,13 +242,17 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
 
     @Override
     public Integer putPacket(Player player, DataPacket packet, boolean needACK, boolean immediate) {
-        if (player.protocol < ProtocolInfo.v0_15_0) {
+        if (ProtocolInfo.isBefore0150(player.protocol)) {
             return this.putLegacyPacket(player, packet, needACK, immediate);
         }
 
         if (this.identifiers.containsKey(player.rawHashCode())) {
             byte[] buffer;
-            if (packet.pid() == ProtocolInfo.BATCH_PACKET) {
+            if (player.useUncompressedBatch && packet.pid() != ProtocolInfo.BATCH_PACKET) {
+                // 未压缩格式客户端：直接发送编码后的数据包，不经过批处理/压缩
+                packet.tryEncode();
+                buffer = packet.getBuffer();
+            } else if (packet.pid() == ProtocolInfo.BATCH_PACKET) {
                 byte[] payload = ((BatchPacket) packet).payload;
                 if (ProtocolInfo.isBefore0160(player.protocol)) {
                     // 0.15.x: [packetID(0x06)][payload_length:int32BE][compressed_data]
@@ -263,9 +267,8 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
                 packet.tryEncode();
                 buffer = packet.getBuffer();
                 try {
-                    buffer = Zlib.deflate(
-                            Binary.appendBytes(Binary.writeUnsignedVarInt(buffer.length), buffer),
-                            Server.getInstance().networkCompressionLevel);
+                    byte[] raw = Binary.appendBytes(Binary.writeUnsignedVarInt(buffer.length), buffer);
+                    buffer = player.useRawDeflate ? Zlib.deflateRaw(raw, Server.getInstance().networkCompressionLevel) : Zlib.deflate(raw, Server.getInstance().networkCompressionLevel);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
@@ -315,7 +318,7 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
         return null;
     }
 
-    @SinceProtocol(ProtocolInfo.v0_13_0)
+    @SinceProtocol(ProtocolInfo.v0_12_0)
     @UnsupportedSince(ProtocolInfo.v0_15_0)
     private Integer putLegacyPacket(Player player, DataPacket packet, boolean needACK, boolean immediate) {
         if (!this.identifiers.containsKey(player.rawHashCode())) {
@@ -333,7 +336,7 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
             return null;
         }
 
-        boolean use0x8ePrefix = player.protocol >= ProtocolInfo.v0_14_0;
+        boolean use0x8ePrefix = !ProtocolInfo.isBefore0140(player.protocol);
 
         if (!needACK) {
             if (packet.encapsulatedPacket == null) {
@@ -380,6 +383,103 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
         }
 
         if (buffer[0] == (byte) 0xfe) {
+            if (buffer.length >= 2) {
+                int packetId = buffer[1] & 0xff;
+
+                // Debug: log state for every 0xFE packet
+                if (Nukkit.DEBUG > 0) {
+                    this.server.getLogger().info("[RakNet] 0xFE packet from " + player.getAddress()
+                            + " packetId=0x" + Integer.toHexString(packetId)
+                            + " protocol=" + player.protocol
+                            + " useUncompressedBatch=" + player.useUncompressedBatch);
+                }
+
+                if (player.protocol != Integer.MAX_VALUE && ProtocolInfo.isBefore0140(player.protocol)) {
+                    DataPacket data = this.network.getPacket(packetId, player.protocol);
+                    if (data != null) {
+                        data.protocol = player.protocol;
+                        data.setBuffer(buffer, 2);
+                        this.logLegacyPacketResolution(player, buffer, data.protocol, 2);
+                        return data;
+                    }
+                }
+
+                // 检测未压缩的 LoginPacket：某些 1.0.x 客户端在 0xfe 后直接发送原始 LoginPacket
+                if (player.protocol == Integer.MAX_VALUE
+                        && packetId == (ProtocolInfo.LOGIN_PACKET & 0xff)
+                        && buffer.length >= 7) {
+                    int possibleProtocol = Binary.readInt(Binary.subBytes(buffer, 2, 4));
+                    if (ProtocolInfo.isSupportedProtocol(possibleProtocol) && !ProtocolInfo.isBefore0160(possibleProtocol)) {
+                        player.useUncompressedBatch = true;
+                        if (Nukkit.DEBUG > 1) {
+                            this.server.getLogger().debug("[UncompressedBatch] Detected uncompressed LoginPacket from " + player.getAddress() + " protocol=" + possibleProtocol);
+                        }
+                        DataPacket data = this.network.getPacket(ProtocolInfo.LOGIN_PACKET);
+                        if (data != null) {
+                            data.protocol = Integer.MAX_VALUE;
+                            data.setBuffer(buffer, 2);
+                            return data;
+                        }
+                    }
+                }
+
+                // 未压缩格式客户端的后续数据包：[0xfe][packetId][raw_data]
+                if (player.useUncompressedBatch && player.protocol != Integer.MAX_VALUE) {
+                    if (Nukkit.DEBUG > 1) {
+                        this.server.getLogger().debug("[UncompressedBatch] Processing packet 0x" + Integer.toHexString(packetId) + " for " + player.getAddress() + " protocol=" + player.protocol);
+                    }
+                    DataPacket data = this.network.getPacket(packetId, player.protocol);
+                    if (data == null) {
+                        // 某些客户端使用标准 1.1.0 ID 而非协议特定的 ID，尝试回退
+                        data = this.network.getPacket(packetId, ProtocolInfo.CURRENT_PROTOCOL);
+                    }
+                    if (data != null) {
+                        data.protocol = player.protocol;
+                        data.setBuffer(buffer, 2);
+                        return data;
+                    }
+                    // 如果仍然找不到，记录警告但不回退到 BatchPacket
+                    this.server.getLogger().warning("[UncompressedBatch] Unknown packet 0x" + Integer.toHexString(packetId) + " from " + player.getAddress() + " protocol=" + player.protocol);
+                    return null;
+                }
+
+                // 未压缩格式客户端但协议未知时，也尝试按未压缩格式解析
+                if (player.useUncompressedBatch && player.protocol == Integer.MAX_VALUE) {
+                    if (Nukkit.DEBUG > 1) {
+                        this.server.getLogger().debug("[UncompressedBatch] Processing packet 0x" + Integer.toHexString(packetId) + " for " + player.getAddress() + " protocol=UNKNOWN");
+                    }
+                    // 尝试从常用协议中查找
+                    DataPacket data = this.network.getPacket(packetId, ProtocolInfo.v1_0_5);
+                    if (data != null) {
+                        data.protocol = ProtocolInfo.v1_0_5;
+                        data.setBuffer(buffer, 2);
+                        return data;
+                    }
+                }
+
+                if (player.protocol == Integer.MAX_VALUE && packetId >= 0x8f) {
+                    @SupportedProtocol int protocol = ProtocolInfo.v0_13_2;
+                    if (packetId == 0x8f && buffer.length >= 8) {
+                        int usernameLength = Binary.readShort(Binary.subBytes(buffer, 2, 2)) & 0xffff;
+                        int protocolOffset = 4 + usernameLength;
+                        if (protocolOffset + 4 <= buffer.length) {
+                            int clientProtocol = Binary.readInt(Binary.subBytes(buffer, protocolOffset, 4));
+                            if (ProtocolInfo.isSupportedProtocol(clientProtocol) && clientProtocol < ProtocolInfo.v0_15_0) {
+                                protocol = clientProtocol;
+                            }
+                        }
+                    }
+
+                    DataPacket data = this.network.getPacket(packetId, protocol);
+                    if (data != null) {
+                        data.protocol = packetId == 0x92 ? Integer.MAX_VALUE : protocol;
+                        data.setBuffer(buffer, 2);
+                        this.logLegacyPacketResolution(player, buffer, data.protocol, 2);
+                        return data;
+                    }
+                }
+            }
+
             DataPacket data = this.network.getPacket(ProtocolInfo.BATCH_PACKET);
             if (data == null) {
                 return null;
@@ -387,9 +487,17 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
             data.protocol = player.protocol;
             int start = 1;
             if (buffer.length >= 6 && buffer[1] == 0x06) {
-                start = 6;
+                // 对于 useUncompressedBatch 客户端，批处理包格式是 [0xFE][0x06][payload]，没有长度前缀
+                // 对于标准客户端，批处理包格式是 [0xFE][0x06][int32 size][payload]
+                start = player.useUncompressedBatch ? 2 : 6;
+            }
+            if (Nukkit.DEBUG > 1) {
+                this.server.getLogger().debug("[BatchPacket] Falling through to batch path for " + player.getAddress()
+                        + " protocol=" + player.protocol + " useUncompressedBatch=" + player.useUncompressedBatch
+                        + " packetId=0x" + Integer.toHexString(buffer[1] & 0xff) + " start=" + start);
             }
             data.setBuffer(buffer, start);
+            this.logLegacyPacketResolution(player, buffer, data.protocol, start);
             return data;
         }
 
@@ -401,30 +509,92 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
             }
             data.protocol = protocol;
             data.setBuffer(buffer, 2);
+            this.logLegacyPacketResolution(player, buffer, data.protocol, 2);
             return data;
         }
 
-        if (player.protocol != Integer.MAX_VALUE && player.protocol < ProtocolInfo.v0_14_0 && buffer.length >= 1) {
-            @SupportedProtocol int protocol = ProtocolInfo.getPacketPoolProtocol(player.protocol);
+        if (player.protocol != Integer.MAX_VALUE && ProtocolInfo.isBefore0140(player.protocol) && buffer.length >= 1) {
+            @SupportedProtocol int protocol = player.protocol;
             DataPacket data = this.network.getPacket(buffer[0] & 0xff, protocol);
             if (data == null) {
                 return null;
             }
             data.protocol = protocol;
             data.setBuffer(buffer, 1);
+            this.logLegacyPacketResolution(player, buffer, data.protocol, 1);
             return data;
         }
 
-        // 协议未知且无 0xfe/0x8e 前缀时，尝试 0.13.x 裸包格式
+        // 协议未知且无 0xfe/0x8e 前缀时，尝试 0.12.x / 0.13.x 裸包格式
         if (player.protocol == Integer.MAX_VALUE) {
-            DataPacket data = this.network.getPacket(buffer[0] & 0xff, ProtocolInfo.v0_13_2);
+            int packetId = buffer[0] & 0xff;
+            if (packetId == 0x8f && buffer.length >= 7) {
+                @SupportedProtocol int protocol = ProtocolInfo.v0_13_2;
+                int usernameLength = Binary.readShort(Binary.subBytes(buffer, 1, 2)) & 0xffff;
+                int protocolOffset = 3 + usernameLength;
+                if (protocolOffset + 4 <= buffer.length) {
+                    int clientProtocol = Binary.readInt(Binary.subBytes(buffer, protocolOffset, 4));
+                    if (ProtocolInfo.isSupportedProtocol(clientProtocol) && clientProtocol < ProtocolInfo.v0_15_0) {
+                        protocol = clientProtocol;
+                    }
+                }
+
+                DataPacket data = this.network.getPacket(packetId, protocol);
+                if (data != null) {
+                    data.protocol = protocol;
+                    data.setBuffer(buffer, 1);
+                    this.logLegacyPacketResolution(player, buffer, data.protocol, 1);
+                    return data;
+                }
+            }
+
+            DataPacket data = this.network.getPacket(packetId, ProtocolInfo.v0_13_2);
             if (data != null) {
-                data.protocol = ProtocolInfo.v0_13_2;
+                data.protocol = packetId == 0x92 ? Integer.MAX_VALUE : ProtocolInfo.v0_13_2;
                 data.setBuffer(buffer, 1);
+                this.logLegacyPacketResolution(player, buffer, data.protocol, 1);
                 return data;
             }
         }
 
+        this.logUnresolvedLegacyPacket(player, buffer);
         return null;
+    }
+
+    private void logLegacyPacketResolution(Player player, byte[] buffer, int protocol, int startOffset) {
+        if (this.server == null || Nukkit.DEBUG <= 1 || !this.looksLikeLegacyPacket(buffer)) {
+            return;
+        }
+
+        String protocolText = protocol == Integer.MAX_VALUE ? "unknown" : String.valueOf(protocol);
+        this.server.getLogger().debug("Resolved legacy packet from " + player.getAddress()
+                + " head=0x" + Binary.bytesToHexString(Binary.subBytes(buffer, 0, Math.min(buffer.length, 12)))
+                + ", start=" + startOffset
+                + ", protocol=" + protocolText);
+    }
+
+    private void logUnresolvedLegacyPacket(Player player, byte[] buffer) {
+        if (this.server == null || player == null || !this.looksLikeLegacyPacket(buffer)) {
+            return;
+        }
+
+        String protocolText = player.protocol == Integer.MAX_VALUE ? "unknown" : String.valueOf(player.protocol);
+        this.server.getLogger().notice("Unresolved legacy packet from " + player.getAddress()
+                + " protocol=" + protocolText
+                + " head=0x" + Binary.bytesToHexString(Binary.subBytes(buffer, 0, Math.min(buffer.length, 16)))
+                + " length=" + buffer.length);
+    }
+
+    private boolean looksLikeLegacyPacket(byte[] buffer) {
+        if (buffer.length == 0) {
+            return false;
+        }
+
+        int first = buffer[0] & 0xff;
+        if (first == 0x8e || first == 0x8f || first == 0x92) {
+            return true;
+        }
+
+        return first == 0xfe && buffer.length >= 2 && ((buffer[1] & 0xff) >= 0x8f);
     }
 }
