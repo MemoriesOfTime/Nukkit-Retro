@@ -102,6 +102,23 @@ public class Session {
         return this.id;
     }
 
+    static boolean isDataPacketId(int packetId) {
+        return packetId >= 0x80 && packetId <= 0x8f;
+    }
+
+    static boolean isOfflinePacketId(int packetId) {
+        return packetId > 0x00 && packetId < 0x80;
+    }
+
+    static boolean isValidSplitPacket(EncapsulatedPacket packet) {
+        return packet.splitCount != null
+                && packet.splitIndex != null
+                && packet.splitCount > 0
+                && packet.splitCount <= MAX_SPLIT_SIZE
+                && packet.splitIndex >= 0
+                && packet.splitIndex < packet.splitCount;
+    }
+
     public void update(long time) throws Exception {
         if (!this.isActive && (this.lastUpdate + 10000) < time) { //10 second timeout
             this.disconnect("timeout");
@@ -291,7 +308,7 @@ public class Session {
     }
 
     private void handleSplit(EncapsulatedPacket packet) throws Exception {
-        if (packet.splitCount >= MAX_SPLIT_SIZE || packet.splitIndex >= MAX_SPLIT_SIZE || packet.splitIndex < 0) {
+        if (!isValidSplitPacket(packet)) {
             return;
         }
 
@@ -306,11 +323,17 @@ public class Session {
             this.splitPackets.get(packet.splitID).put(packet.splitIndex, packet);
         }
 
-        if (this.splitPackets.get(packet.splitID).size() == packet.splitCount) {
+        Map<Integer, EncapsulatedPacket> splitGroup = this.splitPackets.get(packet.splitID);
+        if (splitGroup.size() == packet.splitCount) {
             EncapsulatedPacket pk = new EncapsulatedPacket();
             BinaryStream stream = new BinaryStream();
             for (int i = 0; i < packet.splitCount; i++) {
-                stream.put(this.splitPackets.get(packet.splitID).get(i).buffer);
+                EncapsulatedPacket splitPart = splitGroup.get(i);
+                if (splitPart == null) {
+                    this.splitPackets.remove(packet.splitID);
+                    return;
+                }
+                stream.put(splitPart.buffer);
             }
             pk.buffer = stream.getBuffer();
             pk.length = pk.buffer.length;
@@ -458,7 +481,7 @@ public class Session {
         this.isActive = true;
         this.lastUpdate = System.currentTimeMillis();
         if (this.state == STATE_CONNECTED || this.state == STATE_CONNECTING_2) {
-            if (((packet.buffer[0] & 0xff) >= 0x80 || (packet.buffer[0] & 0xff) <= 0x8f) && packet instanceof DataPacket) {
+            if (isDataPacketId(packet.buffer[0] & 0xff) && packet instanceof DataPacket) {
                 DataPacket dp = (DataPacket) packet;
                 dp.decode();
 
@@ -518,7 +541,7 @@ public class Session {
                     }
                 }
             }
-        } else if ((packet.buffer[0] & 0xff) > 0x00 || (packet.buffer[0] & 0xff) < 0x80) { //Not Data packet :)
+        } else if (isOfflinePacketId(packet.buffer[0] & 0xff)) { // Not data packet :)
             packet.decode();
             if (packet instanceof OPEN_CONNECTION_REQUEST_1) {
                 //TODO: check protocol number and refuse connections

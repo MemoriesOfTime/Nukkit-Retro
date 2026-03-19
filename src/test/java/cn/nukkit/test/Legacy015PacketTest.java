@@ -25,17 +25,31 @@ class Legacy015PacketTest {
                 () -> assertEquals(ProtocolInfo.v0_16_0, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v0_16_0)),
                 () -> assertEquals(ProtocolInfo.v1_0_0_0, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_0_0_0)),
                 () -> assertEquals(ProtocolInfo.v1_0_0, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_0_0)),
-                () -> assertEquals(ProtocolInfo.v1_0_3, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_0_3)),
                 () -> assertEquals(ProtocolInfo.v1_0_4, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_0_4)),
+                () -> assertTrue(ProtocolInfo.isSupportedProtocol(ProtocolInfo.v1_1_0)),
+                () -> assertTrue(ProtocolInfo.isSupportedProtocol(ProtocolInfo.v1_1_1)),
+                () -> assertTrue(ProtocolInfo.isSupportedProtocol(ProtocolInfo.v1_1_2)),
+                () -> assertTrue(ProtocolInfo.isSupportedProtocol(ProtocolInfo.v1_1_3)),
+                () -> assertEquals(ProtocolInfo.v1_1_3, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_1_0)),
+                () -> assertEquals(ProtocolInfo.v1_1_3, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_1_1)),
+                () -> assertEquals(ProtocolInfo.v1_1_3, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_1_2)),
+                () -> assertEquals(ProtocolInfo.v1_1_3, ProtocolInfo.getPacketPoolProtocol(ProtocolInfo.v1_1_3)),
+                () -> assertTrue(ProtocolInfo.isLegacyProtocol(ProtocolInfo.v1_1_0)),
+                () -> assertTrue(ProtocolInfo.isLegacyProtocol(ProtocolInfo.v1_1_1)),
+                () -> assertTrue(ProtocolInfo.isLegacyProtocol(ProtocolInfo.v1_1_2)),
+                () -> assertFalse(ProtocolInfo.isLegacyProtocol(ProtocolInfo.v1_1_3)),
                 () -> assertEquals("0.15.0", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_15_0)),
                 () -> assertEquals("0.15.4", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_15_4)),
                 () -> assertEquals("0.15.9", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_15_9)),
                 () -> assertEquals("0.15.10", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_15_10)),
                 () -> assertEquals("0.16.0", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v0_16_0)),
                 () -> assertEquals("1.0.0.0", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_0_0_0)),
-                () -> assertEquals("1.0.0", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_0_0)),
-                () -> assertEquals("1.0.3", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_0_3)),
-                () -> assertEquals("1.0.4", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_0_4))
+                () -> assertEquals("1.0.2", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_0_0)),
+                () -> assertEquals("1.0.4", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_0_4)),
+                () -> assertEquals("1.1.0", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_1_0)),
+                () -> assertEquals("1.1.1", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_1_1)),
+                () -> assertEquals("1.1.2", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_1_2)),
+                () -> assertEquals("1.1.3", ProtocolInfo.getMinecraftVersion(ProtocolInfo.v1_1_3))
         );
     }
 
@@ -76,7 +90,9 @@ class Legacy015PacketTest {
         expected.putBoolean(packet.b1);
         expected.putBoolean(packet.b2);
         expected.putBoolean(packet.b3);
-        expected.putString(packet.unknownstr);
+        // 0.15.x uses short-prefixed strings (DataPacket overrides putString)
+        expected.putShort(packet.unknownstr.length());
+        expected.put(packet.unknownstr.getBytes());
 
         assertArrayEquals(expected.getBuffer(), Arrays.copyOfRange(packet.getBuffer(), 1, packet.getBuffer().length));
     }

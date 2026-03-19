@@ -91,19 +91,41 @@ public class StartGamePacket extends DataPacket {
             return;
         }
 
+        if (this.protocol >= ProtocolInfo.v1_1_0) {
+            this.putVarLong(this.entityUniqueId);
+            this.putVarLong(this.entityRuntimeId);
+            this.putVarInt(this.playerGamemode);
+            this.putVector3f(this.x, this.y, this.z);
+            this.putLFloat(this.pitch);
+            this.putLFloat(this.yaw);
+            this.putVarInt(this.seed);
+            this.putVarInt(this.dimension);
+            this.putVarInt(this.generator);
+            this.putVarInt(this.gamemode);
+            this.putVarInt(this.difficulty);
+            this.putBlockCoords(this.spawnX, this.spawnY, this.spawnZ);
+            this.putBoolean(this.hasAchievementsDisabled);
+            this.putVarInt(this.dayCycleStopTime);
+            this.putBoolean(this.eduMode);
+            this.putLFloat(this.rainLevel);
+            this.putLFloat(this.lightningLevel);
+            this.putBoolean(this.commandsEnabled);
+            this.putBoolean(this.isTexturePacksRequired);
+            this.putUnsignedVarInt(this.ruleDatas.length);
+            for (RuleData rule : this.ruleDatas) {
+                this.putRuleData(rule);
+            }
+            this.putString(this.levelId);
+            this.putString(this.worldName);
+            this.putString(this.premiumWorldTemplateId);
+            return;
+        }
+
         this.putVarLong(this.entityUniqueId);
         this.putVarLong(this.entityRuntimeId);
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
-            this.putVarInt(this.playerGamemode);
-        }
         this.putVector3f(this.x, this.y, this.z);
-        if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
-            this.putLFloat(0);
-            this.putLFloat(0);
-        } else {
-            this.putLFloat(this.yaw);
-            this.putLFloat(this.pitch);
-        }
+        this.putLFloat(0);
+        this.putLFloat(0);
         this.putVarInt(this.seed);
         this.putVarInt(this.dimension);
         this.putVarInt(this.generator);
@@ -117,19 +139,8 @@ public class StartGamePacket extends DataPacket {
         this.putLFloat(this.lightningLevel);
         this.putBoolean(this.commandsEnabled);
         this.putBoolean(this.isTexturePacksRequired);
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
-            this.putUnsignedVarInt(this.ruleDatas.length);
-            for (RuleData rule : this.ruleDatas) {
-                this.putRuleData(rule);
-            }
-        }
         this.putString(this.levelId);
         this.putString(this.worldName);
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
-            this.putString(this.premiumWorldTemplateId);
-            this.putBoolean(this.unknown);
-            this.putLLong(this.currentTick);
-        }
     }
 
 }

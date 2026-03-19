@@ -36,10 +36,17 @@ public class TextPacket extends DataPacket {
                 this.message = this.getString();
                 break;
             case TYPE_WHISPER:
-            case TYPE_ANNOUNCEMENT:
-                if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+                if (this.protocol >= ProtocolInfo.v1_0_0_0) {
                     this.source = this.getString();
                 }
+                this.message = this.getString();
+                break;
+            case TYPE_ANNOUNCEMENT:
+                if (this.protocol >= ProtocolInfo.v1_1_3) {
+                    this.source = this.getString();
+                }
+                this.message = this.getString();
+                break;
             case TYPE_RAW:
             case TYPE_TIP:
             case TYPE_SYSTEM:
@@ -60,10 +67,10 @@ public class TextPacket extends DataPacket {
     public void encode() {
         this.reset();
         byte type = this.type;
-        if (ProtocolInfo.isLegacyProtocol(this.protocol) && type == TYPE_ANNOUNCEMENT) {
+        if (this.protocol < ProtocolInfo.v1_1_3 && type == TYPE_ANNOUNCEMENT) {
             type = TYPE_SYSTEM;
         }
-        if ((ProtocolInfo.isBefore0160(this.protocol)) && (type == TYPE_WHISPER || type == TYPE_ANNOUNCEMENT)) {
+        if (ProtocolInfo.isBefore0160(this.protocol) && (type == TYPE_WHISPER || type == TYPE_ANNOUNCEMENT)) {
             type = TYPE_SYSTEM;
         }
         this.putByte(type);
@@ -74,10 +81,17 @@ public class TextPacket extends DataPacket {
                 this.putString(this.message);
                 break;
             case TYPE_WHISPER:
-            case TYPE_ANNOUNCEMENT:
-                if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+                if (this.protocol >= ProtocolInfo.v1_0_0_0) {
                     this.putString(this.source);
                 }
+                this.putString(this.message);
+                break;
+            case TYPE_ANNOUNCEMENT:
+                if (this.protocol >= ProtocolInfo.v1_1_3) {
+                    this.putString(this.source);
+                }
+                this.putString(this.message);
+                break;
             case TYPE_RAW:
             case TYPE_TIP:
             case TYPE_SYSTEM:

@@ -480,16 +480,20 @@ public class RakNetInterface implements ServerInstance, AdvancedSourceInterface 
                 }
             }
 
-            DataPacket data = this.network.getPacket(ProtocolInfo.BATCH_PACKET);
-            if (data == null) {
-                return null;
-            }
+            DataPacket data = new BatchPacket();
             data.protocol = player.protocol;
             int start = 1;
             if (buffer.length >= 6 && buffer[1] == 0x06) {
                 // 对于 useUncompressedBatch 客户端，批处理包格式是 [0xFE][0x06][payload]，没有长度前缀
                 // 对于标准客户端，批处理包格式是 [0xFE][0x06][int32 size][payload]
                 start = player.useUncompressedBatch ? 2 : 6;
+            } else if (buffer.length >= 2 && Zlib.hasZlibHeader(Binary.subBytes(buffer, 1, 2))) {
+                // 1.1.0+ 客户端发送的批处理包格式是 [0xFE][zlib_data]，没有长度前缀
+                // 检测 zlib 头部（0x78 0x9c 或 0x78 0x01 等），直接跳过 0xFE
+                start = 1;
+                if (Nukkit.DEBUG > 1) {
+                    this.server.getLogger().debug("[BatchPacket] Detected zlib header at offset 1 for " + player.getAddress());
+                }
             }
             if (Nukkit.DEBUG > 1) {
                 this.server.getLogger().debug("[BatchPacket] Falling through to batch path for " + player.getAddress()

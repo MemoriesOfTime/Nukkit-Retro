@@ -742,9 +742,15 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     chunkOrder = FullChunkDataPacket.ORDER_COLUMNS;
                 }
             } else {
-                FullChunk fullChunk = this.level.getChunk(x, z, false);
+                FullChunk fullChunk = this.level.getLoadedChunk(x, z);
                 if (fullChunk instanceof cn.nukkit.level.format.anvil.Chunk) {
                     byte[] legacyPayload = this.level.buildLegacyChunkPayload(x, z);
+                    if (legacyPayload != null) {
+                        payload = legacyPayload;
+                        chunkOrder = FullChunkDataPacket.ORDER_LAYERED;
+                    }
+                } else if (fullChunk == null && this.level.getProvider() instanceof cn.nukkit.level.format.anvil.Anvil) {
+                    byte[] legacyPayload = this.level.convertCachedAnvilPayloadToLegacyPayload(payload);
                     if (legacyPayload != null) {
                         payload = legacyPayload;
                         chunkOrder = FullChunkDataPacket.ORDER_LAYERED;
@@ -1378,9 +1384,9 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     }
 
     protected void processMovement(int tickDiff) {
-        if (!this.isAlive() || !this.spawned || this.newPosition == null || this.teleportPosition != null || this.isSleeping()) {
-            return;
-        }
+                    if (!this.isAlive() || !this.spawned || this.newPosition == null || this.teleportPosition != null || this.isSleeping()) {
+                        return;
+                    }
         Vector3 newPos = this.newPosition;
         double distanceSquared = newPos.distanceSquared(this);
         boolean revert = false;
@@ -1488,7 +1494,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     if (!to.equals(ev.getTo())) { //If plugins modify the destination
                         this.teleport(ev.getTo(), null);
                     } else {
-                        this.addMovement(this.x, this.y + this.getEyeHeight(), this.z, this.yaw, this.pitch, this.yaw);
+                        this.level.addEntityMovement((int) this.x >> 4, (int) this.z >> 4, this.getId(), this.x, this.y + this.getEyeHeight(), this.z, this.yaw, this.pitch, this.yaw);
                     }
                 } else {
                     this.blocksAround = blocksAround;
@@ -1552,19 +1558,15 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     }
 
     @Override
+    protected void updateMovement() {
+    }
+
+    @Override
     public void addMovement(double x, double y, double z, double yaw, double pitch, double headYaw) {
-        if (this.chunk == null) return;
-        MovePlayerPacket pk = new MovePlayerPacket();
-        pk.eid = this.getId();
-        pk.x = (float) x;
-        pk.y = (float) y;
-        pk.z = (float) z;
-        pk.yaw = (float) yaw;
-        pk.headYaw = (float) headYaw;
-        pk.pitch = (float) pitch;
-        pk.mode = MovePlayerPacket.MODE_NORMAL;
-        pk.onGround = this.onGround;
-        this.level.addChunkPacket(this.chunk.getX(), this.chunk.getZ(), pk);
+        if (this.chunk == null) {
+            return;
+        }
+        this.level.addEntityMovement(this.chunk.getX(), this.chunk.getZ(), this.getId(), x, y, z, yaw, pitch, headYaw);
     }
 
     @Override
@@ -2046,22 +2048,20 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     }
 
                     MovePlayerPacket movePlayerPacket = (MovePlayerPacket) packet;
+
+                    if (riding instanceof EntityBoat) {
+                        riding.setPositionAndRotation(this.temporalVector.setComponents(movePlayerPacket.x, movePlayerPacket.y - 1, movePlayerPacket.z), (movePlayerPacket.headYaw + 90) % 360, 0);
+                    }
+
                     Vector3 newPos = new Vector3(movePlayerPacket.x, movePlayerPacket.y - this.getEyeHeight(), movePlayerPacket.z);
 
                     if (newPos.distanceSquared(this) < 0.01 && movePlayerPacket.yaw % 360 == this.yaw && movePlayerPacket.pitch % 360 == this.pitch) {
                         break;
                     }
 
-                    boolean revert = false;
-                    if (!this.isAlive() || !this.spawned) {
-                        revert = true;
-                        this.forceMovement = new Vector3(this.x, this.y, this.z);
-                    }
-
-                    if (this.forceMovement != null && (newPos.distanceSquared(this.forceMovement) > 0.1 || revert)) {
-                        this.sendPosition(this.forceMovement, movePlayerPacket.yaw, movePlayerPacket.pitch, MovePlayerPacket.MODE_RESET);
+                    if ((!this.isAlive() || !this.spawned) && newPos.distanceSquared(this) > 0.01) {
+                        this.sendPosition(this, this.yaw, this.pitch, MovePlayerPacket.MODE_RESET);
                     } else {
-
                         movePlayerPacket.yaw %= 360;
                         movePlayerPacket.pitch %= 360;
 
@@ -2072,12 +2072,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         this.setRotation(movePlayerPacket.yaw, movePlayerPacket.pitch);
                         this.newPosition = newPos;
                         this.forceMovement = null;
-                    }
-
-                    if (riding != null) {
-                        if (riding instanceof EntityBoat) {
-                            riding.setPositionAndRotation(this.temporalVector.setComponents(movePlayerPacket.x, movePlayerPacket.y - 1, movePlayerPacket.z), (movePlayerPacket.headYaw + 90) % 360, 0);
-                        }
                     }
 
                     break;
@@ -4430,6 +4424,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             pk.eid = (ProtocolInfo.isBefore0160(this.protocol)) ? 0 : this.id;
             this.dataPacket(pk);
         }
+
+        this.newPosition = null;
     }
 
     @Override

@@ -20,7 +20,7 @@ public class AnimatePacket extends DataPacket {
             this.action = (int) this.getUnsignedVarInt();
             this.eid = getVarLong();
         }
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol) && (this.action & 0x80) != 0) {
+        if (this.protocol >= ProtocolInfo.v1_1_0 && (this.action & 0x80) != 0) {
             this.unknown = this.getLFloat();
         }
     }
@@ -35,7 +35,7 @@ public class AnimatePacket extends DataPacket {
             this.putUnsignedVarInt(this.action);
             this.putVarLong(this.eid);
         }
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol) && (this.action & 0x80) != 0) {
+        if (this.protocol >= ProtocolInfo.v1_1_0 && (this.action & 0x80) != 0) {
             this.putLFloat(this.unknown);
         }
     }

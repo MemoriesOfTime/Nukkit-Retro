@@ -22,11 +22,11 @@ public class MobEquipmentPacket extends DataPacket {
 
     @Override
     public void decode() {
-        this.eid = (ProtocolInfo.isBefore0160(this.protocol)) ? this.getLong() : this.getVarLong(); //EntityRuntimeID
+        this.eid = ProtocolInfo.isBefore0160(this.protocol) ? this.getLong() : this.getVarLong(); //EntityRuntimeID
         this.item = this.getSlot();
         this.slot = this.getByte();
         this.selectedSlot = this.getByte();
-        this.windowId = ProtocolInfo.isLegacyProtocol(this.protocol) || this.feof() ? 0 : this.getByte();
+        this.windowId = ProtocolInfo.isBefore0160(this.protocol) || this.feof() ? 0 : this.getByte();
     }
 
     @Override
@@ -40,7 +40,7 @@ public class MobEquipmentPacket extends DataPacket {
         this.putSlot(this.item);
         this.putByte((byte) this.slot);
         this.putByte((byte) this.selectedSlot);
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+        if (!ProtocolInfo.isBefore0160(this.protocol)) {
             this.putByte((byte) this.windowId);
         }
     }

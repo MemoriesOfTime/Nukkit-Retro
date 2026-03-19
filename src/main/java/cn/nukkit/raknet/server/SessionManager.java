@@ -70,6 +70,12 @@ public class SessionManager {
         this.tickProcessor();
     }
 
+    static boolean isUnconnectedPing(byte pid) {
+        int packetId = pid & 0xff;
+        return packetId == (UNCONNECTED_PING.ID & 0xff)
+                || packetId == (UNCONNECTED_PING_OPEN_CONNECTIONS.ID & 0xff);
+    }
+
     private void tickProcessor() throws Exception {
         this.lastMeasure = System.currentTimeMillis();
         while (!this.shutdown) {
@@ -175,21 +181,24 @@ public class SessionManager {
                     return false;
                 }
 
+                if (isUnconnectedPing(pid)) {
+                    Packet pingPacket = (pid == UNCONNECTED_PING_OPEN_CONNECTIONS.ID) ? new UNCONNECTED_PING_OPEN_CONNECTIONS() : new UNCONNECTED_PING();
+                    pingPacket.buffer = buffer;
+                    pingPacket.decode();
+
+                    UNCONNECTED_PONG pk = new UNCONNECTED_PONG();
+                    pk.serverID = this.getID();
+                    pk.pingID = ((UNCONNECTED_PING) pingPacket).pingID;
+                    pk.serverName = this.getName();
+                    this.sendPacket(pk, source, port);
+                    return true;
+                }
+
                 Packet packet = this.getPacketFromPool(pid);
                 if (packet != null) {
                     packet.buffer = buffer;
                     this.getSession(source, port).handlePacket(packet);
                     return true;
-                } else if (pid == UNCONNECTED_PING.ID) {
-                    packet = new UNCONNECTED_PING();
-                    packet.buffer = buffer;
-                    packet.decode();
-
-                    UNCONNECTED_PONG pk = new UNCONNECTED_PONG();
-                    pk.serverID = this.getID();
-                    pk.pingID = ((UNCONNECTED_PING) packet).pingID;
-                    pk.serverName = this.getName();
-                    this.sendPacket(pk, source, port);
                 } else if (buffer.length != 0) {
                     this.streamRAW(source, port, buffer);
                     return true;

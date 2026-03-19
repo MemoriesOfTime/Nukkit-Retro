@@ -55,7 +55,12 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>
-            <version>4.1.6.Final</version>
+            <version>4.1.101.Final</version>
+        </dependency>
+        <dependency>
+            <groupId>org.cloudburstmc.netty</groupId>
+            <artifactId>netty-transport-raknet</artifactId>
+            <version>1.0.0.CR3-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.github.dblock</groupId>

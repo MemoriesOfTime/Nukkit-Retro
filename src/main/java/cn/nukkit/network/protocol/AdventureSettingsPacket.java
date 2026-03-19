@@ -74,7 +74,7 @@ public class AdventureSettingsPacket extends DataPacket {
         this.noClip = (this.flags & (1 << 7)) != 0;
         this.worldBuilder = (this.flags & (1 << 8)) != 0;
         this.isFlying = (this.flags & (1 << 9)) != 0;
-        this.muted = !ProtocolInfo.isLegacyProtocol(this.protocol) && (this.flags & (1 << 10)) != 0;
+        this.muted = this.protocol >= ProtocolInfo.v1_1_0 && (this.flags & (1 << 10)) != 0;
     }
 
     @Override
@@ -103,8 +103,8 @@ public class AdventureSettingsPacket extends DataPacket {
         if (this.noClip) this.flags |= 1 << 7;
         if (this.worldBuilder) this.flags |= 1 << 8;
         if (this.isFlying) this.flags |= 1 << 9;
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol) && this.muted) this.flags |= 1 << 10;
-        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+        if (this.protocol >= ProtocolInfo.v1_1_0 && this.muted) this.flags |= 1 << 10;
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.putInt(this.flags);
             this.putInt(this.userPermission);
             this.putInt(this.globalPermission);

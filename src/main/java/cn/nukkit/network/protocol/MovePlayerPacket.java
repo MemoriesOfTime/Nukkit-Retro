@@ -11,8 +11,7 @@ public class MovePlayerPacket extends DataPacket {
 
     public static final byte MODE_NORMAL = 0;
     public static final byte MODE_RESET = 1;
-    public static final byte MODE_TELEPORT = 2;
-    public static final byte MODE_PITCH = 3; //facepalm Mojang
+    public static final byte MODE_ROTATION = 2;
 
     public long eid;
     public float x;
@@ -24,12 +23,10 @@ public class MovePlayerPacket extends DataPacket {
     public byte mode = MODE_NORMAL;
     public boolean onGround;
     public long ridingEid;
-    public int int1 = 0;
-    public int int2 = 0;
 
     @Override
     public void decode() {
-        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.eid = this.getLong();
             this.x = this.getFloat();
             this.y = this.getFloat();
@@ -44,24 +41,20 @@ public class MovePlayerPacket extends DataPacket {
             this.y = v.y;
             this.z = v.z;
             this.pitch = this.getLFloat();
-            this.headYaw = this.getLFloat();
             this.yaw = this.getLFloat();
+            this.headYaw = this.getLFloat();
         }
         this.mode = (byte) this.getByte();
-        this.onGround = (ProtocolInfo.isBefore0160(this.protocol)) ? this.getByte() > 0 : this.getBoolean();
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+        this.onGround = ProtocolInfo.isBefore0160(this.protocol) ? this.getByte() > 0 : this.getBoolean();
+        if (this.protocol >= ProtocolInfo.v1_1_0) {
             this.ridingEid = this.getVarLong();
-            if (this.mode == MODE_TELEPORT){
-                this.int1 = this.getLInt();
-                this.int2 = this.getLInt();
-            }
         }
     }
 
     @Override
     public void encode() {
         this.reset();
-        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.putLong(this.eid);
             this.putFloat(this.x);
             this.putFloat(this.y);
@@ -77,17 +70,13 @@ public class MovePlayerPacket extends DataPacket {
             this.putLFloat(this.headYaw);
         }
         this.putByte(this.mode);
-        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.putByte(this.onGround ? (byte) 1 : 0);
         } else {
             this.putBoolean(this.onGround);
         }
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+        if (this.protocol >= ProtocolInfo.v1_1_0) {
             this.putVarLong(this.ridingEid);
-            if (this.mode == MODE_TELEPORT){
-                this.putLInt(this.int1);
-                this.putLInt(this.int2);
-            }
         }
     }
 

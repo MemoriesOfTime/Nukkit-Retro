@@ -29,6 +29,7 @@ public class AddPlayerPacket extends DataPacket {
     public float speedY;
     public float speedZ;
     public float pitch;
+    public float headYaw = Float.NaN;
     public float yaw;
     public Item item;
     public EntityMetadata metadata = new EntityMetadata();
@@ -60,7 +61,7 @@ public class AddPlayerPacket extends DataPacket {
             this.putVector3f(this.x, this.y, this.z);
             this.putVector3f(this.speedX, this.speedY, this.speedZ);
             this.putLFloat(this.pitch);
-            this.putLFloat(this.yaw); //TODO headrot
+            this.putLFloat(Float.isNaN(this.headYaw) ? this.yaw : this.headYaw);
             this.putLFloat(this.yaw);
         }
         this.putSlot(this.item);

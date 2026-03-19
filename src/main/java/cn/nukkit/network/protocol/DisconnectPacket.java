@@ -33,7 +33,7 @@ public class DisconnectPacket extends DataPacket {
             return;
         }
         this.putBoolean(this.hideDisconnectionScreen);
-        if (ProtocolInfo.isLegacyProtocol(this.protocol) || !this.hideDisconnectionScreen) {
+        if (this.protocol < ProtocolInfo.v1_1_0 || !this.hideDisconnectionScreen) {
             this.putString(this.message);
         }
     }

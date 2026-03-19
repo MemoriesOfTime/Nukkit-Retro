@@ -45,9 +45,7 @@ public interface ProtocolInfo {
     @ApiStatus.AvailableSince("1.0.0.0")
     int v1_0_0_0 = 92;
     @ApiStatus.AvailableSince("1.0.0")
-    int v1_0_0 = 100;
-    @ApiStatus.AvailableSince("1.0.3")
-    int v1_0_3 = 101;
+    int v1_0_0 = 100; // v1.0.0, v1.0.1, v1.0.2, v1.0.3 share protocol 100
     @ApiStatus.AvailableSince("1.0.4")
     int v1_0_4 = 102;
     @ApiStatus.AvailableSince("1.0.5")
@@ -56,16 +54,22 @@ public interface ProtocolInfo {
     int v1_0_6 = 106;
     @ApiStatus.AvailableSince("1.0.7")
     int v1_0_7 = 107;
-    @ApiStatus.AvailableSince("1.0.9")
-    int v1_0_9 = v1_0_7; // Alias, same protocol number
+    @ApiStatus.AvailableSince("1.0.8")
+    int v1_0_8 = 108;
     @ApiStatus.AvailableSince("1.1.0")
-    int v1_1_0 = 113;
+    int v1_1_0 = 110;
+    @ApiStatus.AvailableSince("1.1.1")
+    int v1_1_1 = 111;
+    @ApiStatus.AvailableSince("1.1.2")
+    int v1_1_2 = 112;
+    @ApiStatus.AvailableSince("1.1.3")
+    int v1_1_3 = 113; // 1.1.3+ share protocol 113 family
 
     /**
      * 当前分支只维护 1.1.x 及以下，不引入 1.2+ 协议。
      */
     @SupportedProtocol
-    int CURRENT_PROTOCOL = v1_1_0;
+    int CURRENT_PROTOCOL = v1_1_3;
 
     List<Integer> SUPPORTED_PROTOCOLS = Collections.unmodifiableList(Arrays.asList(
             v0_12_0,
@@ -84,12 +88,15 @@ public interface ProtocolInfo {
             v0_16_0,
             v1_0_0_0,
             v1_0_0,
-            v1_0_3,
             v1_0_4,
             v1_0_5,
             v1_0_6,
             v1_0_7,
-            v1_1_0
+            v1_0_8,
+            v1_1_0,
+            v1_1_1,
+            v1_1_2,
+            v1_1_3
     ));
 
     String MINECRAFT_VERSION_NETWORK = getMinecraftVersion(CURRENT_PROTOCOL);
@@ -120,19 +127,21 @@ public interface ProtocolInfo {
                 return v0_16_0;
             case v1_0_0_0:
                 return v1_0_0_0;
-            case v1_0_0:
+            case v1_0_0: // v1.0.0, v1.0.1, v1.0.2, v1.0.3 share protocol 100
                 return v1_0_0;
-            case v1_0_3:
-                return v1_0_3;
             case v1_0_4:
                 return v1_0_4;
             case v1_0_5:
             case v1_0_6:
             case v1_0_7:
+            case v1_0_8:
                 return v1_0_5;
             case v1_1_0:
+            case v1_1_1:
+            case v1_1_2:
+            case v1_1_3:
             default:
-                return v1_1_0;
+                return v1_1_3;
         }
     }
 
@@ -258,7 +267,7 @@ public interface ProtocolInfo {
     }
 
     static boolean isLegacyProtocol(int protocol) {
-        return protocol < v1_1_0;
+        return protocol < v1_1_3;
     }
 
     static boolean isBefore0130(int protocol) {
@@ -314,9 +323,7 @@ public interface ProtocolInfo {
             case v1_0_0_0:
                 return "1.0.0.0";
             case v1_0_0:
-                return "1.0.0";
-            case v1_0_3:
-                return "1.0.3";
+                return "1.0.2"; // v1.0.0, v1.0.1, v1.0.2, v1.0.3 share protocol 100
             case v1_0_4:
                 return "1.0.4";
             case v1_0_5:
@@ -324,10 +331,18 @@ public interface ProtocolInfo {
             case v1_0_6:
                 return "1.0.6";
             case v1_0_7:
-                return "1.0.9"; // 1.0.7, 1.0.8, and 1.0.9 share protocol 107
+                return "1.0.7"; // 1.0.7 and 1.0.9 share protocol 107
+            case v1_0_8:
+                return "1.0.8"; // Protocol 108
             case v1_1_0:
+                return "1.1.0"; // Protocol 110
+            case v1_1_1:
+                return "1.1.1"; // Protocol 111
+            case v1_1_2:
+                return "1.1.2"; // Protocol 112
+            case v1_1_3:
             default:
-                return "1.1.3";
+                return "1.1.3"; // Protocol 113: 1.1.3 through 1.1.7（兼容归并）
         }
     }
 
@@ -354,12 +369,15 @@ public interface ProtocolInfo {
             v0_16_0,
             v1_0_0_0,
             v1_0_0,
-            v1_0_3,
             v1_0_4,
             v1_0_5,
             v1_0_6,
             v1_0_7,
-            v1_1_0
+            v1_0_8,
+            v1_1_0,
+            v1_1_1,
+            v1_1_2,
+            v1_1_3
     })
     @interface SupportedProtocol {
     }

@@ -94,6 +94,53 @@ public class Anvil extends BaseLevelProvider {
         NBTIO.writeGZIPCompressed(new CompoundTag().putCompound("Data", levelData), new FileOutputStream(path + "level.dat"), ByteOrder.BIG_ENDIAN);
     }
 
+    public static byte[] serializeNetworkChunkPayload(Chunk chunk, byte[] blockEntities) {
+        Map<Integer, Integer> extra = chunk.getBlockExtraDataArray();
+        BinaryStream extraData;
+        if (!extra.isEmpty()) {
+            extraData = new BinaryStream();
+            extraData.putVarInt(extra.size());
+            for (Map.Entry<Integer, Integer> entry : extra.entrySet()) {
+                extraData.putVarInt(entry.getKey());
+                extraData.putLShort(entry.getValue());
+            }
+        } else {
+            extraData = null;
+        }
+
+        BinaryStream stream = new BinaryStream();
+        int count = 0;
+        cn.nukkit.level.format.ChunkSection[] sections = chunk.getSections();
+        for (int i = sections.length - 1; i >= 0; i--) {
+            if (!sections[i].isEmpty()) {
+                count = i + 1;
+                break;
+            }
+        }
+
+        stream.putByte((byte) count);
+        for (int i = 0; i < count; i++) {
+            stream.putByte((byte) 0);
+            stream.put(sections[i].getBytes());
+        }
+
+        for (int height : chunk.getHeightMapArray()) {
+            stream.putLShort(height);
+        }
+
+        stream.put(chunk.getBiomeIdArray());
+        stream.putByte((byte) 0);
+
+        if (extraData != null) {
+            stream.put(extraData.getBuffer());
+        } else {
+            stream.putVarInt(0);
+        }
+
+        stream.put(blockEntities);
+        return stream.getBuffer();
+    }
+
     @Override
     public AsyncTask requestChunkTask(int x, int z) throws ChunkException {
         Chunk chunk = this.getChunk(x, z, false);
@@ -119,47 +166,7 @@ public class Anvil extends BaseLevelProvider {
             }
         }
 
-        Map<Integer, Integer> extra = chunk.getBlockExtraDataArray();
-        BinaryStream extraData;
-        if (!extra.isEmpty()) {
-            extraData = new BinaryStream();
-            extraData.putVarInt(extra.size());
-            for (Map.Entry<Integer, Integer> entry : extra.entrySet()) {
-                extraData.putVarInt(entry.getKey());
-                extraData.putLShort(entry.getValue());
-            }
-        } else {
-            extraData = null;
-        }
-
-        BinaryStream stream = new BinaryStream();
-        int count = 0;
-        cn.nukkit.level.format.ChunkSection[] sections = chunk.getSections();
-        for (int i = sections.length - 1; i >= 0; i--) {
-            if (!sections[i].isEmpty()) {
-                count = i + 1;
-                break;
-            }
-        }
-        stream.putByte((byte) count);
-        for (int i = 0; i < count; i++) {
-            stream.putByte((byte) 0);
-            stream.put(sections[i].getBytes());
-        }
-        for (int height : chunk.getHeightMapArray()) {
-            stream.putByte((byte) height);
-        }
-        stream.put(new byte[256]);
-        stream.put(chunk.getBiomeIdArray());
-        stream.putByte((byte) 0);
-        if (extraData != null) {
-            stream.put(extraData.getBuffer());
-        } else {
-            stream.putVarInt(0);
-        }
-        stream.put(blockEntities);
-
-        this.getLevel().chunkRequestCallback(x, z, stream.getBuffer());
+        this.getLevel().chunkRequestCallback(x, z, serializeNetworkChunkPayload(chunk, blockEntities));
 
         return null;
     }

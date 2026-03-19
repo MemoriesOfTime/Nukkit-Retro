@@ -39,7 +39,7 @@ public class AddEntityPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.putLong(this.entityRuntimeId);
             this.putInt(this.type);
             this.putFloat(this.x);
@@ -69,8 +69,13 @@ public class AddEntityPacket extends DataPacket {
             this.putUnsignedVarInt(this.type);
             this.putVector3f(this.x, this.y, this.z);
             this.putVector3f(this.speedX, this.speedY, this.speedZ);
-            if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
-                // 0.16.0-1.0.x使用256度角度系统
+            if (this.protocol >= ProtocolInfo.v1_0_0_0) {
+                // 1.0.x-1.1.x still use scaled angles and the older attribute list layout.
+                this.putLFloat(this.pitch * (256f / 360f));
+                this.putLFloat(this.yaw * (256f / 360f));
+                this.putLegacyAttributeList();
+            } else if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+                // 0.16.x keeps the older scaled-angle path without the later attribute payload.
                 this.putLFloat(this.pitch * (256f / 360f));
                 this.putLFloat(this.yaw * (256f / 360f));
                 this.putUnsignedVarInt(0);
@@ -86,6 +91,16 @@ public class AddEntityPacket extends DataPacket {
                 this.putVarLong((long) link[1]);
                 this.putByte((byte) link[2]);
             }
+        }
+    }
+
+    private void putLegacyAttributeList() {
+        this.putUnsignedVarInt(this.attributes.length);
+        for (Attribute attribute : this.attributes) {
+            this.putString(attribute.getName());
+            this.putLFloat(attribute.getMinValue());
+            this.putLFloat(attribute.getValue());
+            this.putLFloat(attribute.getMaxValue());
         }
     }
 }

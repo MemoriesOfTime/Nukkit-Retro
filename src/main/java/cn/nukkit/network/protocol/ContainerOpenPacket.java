@@ -30,13 +30,13 @@ public class ContainerOpenPacket extends DataPacket {
         this.reset();
         this.putByte(this.windowid);
         this.putByte(this.type);
-        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.putShort(this.slots);
             this.putInt(this.x);
             this.putInt(this.y);
             this.putInt(this.z);
             this.putLong(this.entityId);
-        } else if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+        } else if (this.protocol < ProtocolInfo.v1_1_0) {
             this.putVarInt(this.slots);
             this.putBlockCoords(this.x, this.y, this.z);
             this.putVarLong(this.entityId);

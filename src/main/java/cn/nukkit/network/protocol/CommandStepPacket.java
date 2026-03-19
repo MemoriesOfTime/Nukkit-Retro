@@ -45,11 +45,7 @@ public class CommandStepPacket extends DataPacket {
         this.uvarint1 = this.getUnsignedVarInt();
         this.currentStep = this.getUnsignedVarInt();
         this.done = this.getBoolean();
-        if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
-            this.clientId = this.getUnsignedVarLong();
-        } else {
-            this.clientId = this.getVarLong();
-        }
+        this.clientId = this.getUnsignedVarLong();
         String argsString = this.getString();
         this.args = new Gson().fromJson(argsString, CommandArgs.class);
         this.outputJson = this.getString();

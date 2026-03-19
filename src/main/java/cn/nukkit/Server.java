@@ -47,7 +47,7 @@ import cn.nukkit.nbt.tag.FloatTag;
 import cn.nukkit.nbt.tag.ListTag;
 import cn.nukkit.network.CompressBatchedTask;
 import cn.nukkit.network.Network;
-import cn.nukkit.network.RakNetInterface;
+import cn.nukkit.network.NetworkInterfaceFactory;
 import cn.nukkit.network.SourceInterface;
 import cn.nukkit.network.protocol.BatchPacket;
 import cn.nukkit.network.protocol.DataPacket;
@@ -389,7 +389,7 @@ public class Server {
 
         this.queryRegenerateEvent = new QueryRegenerateEvent(this, 5);
 
-        this.network.registerInterface(new RakNetInterface(this));
+        this.network.registerInterface(NetworkInterfaceFactory.create(this));
 
         this.pluginManager.loadPlugins(this.pluginPath);
 

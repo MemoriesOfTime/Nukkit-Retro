@@ -28,8 +28,6 @@ public class SetTimePacket extends DataPacket {
             this.putByte((byte) (this.started ? 1 : 0));
         } else {
             this.putVarInt(this.time);
-        }
-        if (ProtocolInfo.isLegacyProtocol(this.protocol) && !(ProtocolInfo.isBefore0160(this.protocol))) {
             this.putBoolean(this.started);
         }
     }

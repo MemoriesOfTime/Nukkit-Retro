@@ -16,8 +16,7 @@ public class MoveEntityPacket extends DataPacket {
     public double yaw;
     public double headYaw;
     public double pitch;
-    public boolean onGround;
-    public boolean teleport;
+    public int flags;
 
     @Override
     public byte pid() {
@@ -41,10 +40,11 @@ public class MoveEntityPacket extends DataPacket {
             this.y = v.y;
             this.z = v.z;
             this.pitch = this.getByte() * (360d / 256d);
-            this.headYaw = this.getByte() * (360d / 256d);
             this.yaw = this.getByte() * (360d / 256d);
-            this.onGround = this.getBoolean();
-            this.teleport = this.getBoolean();
+            this.headYaw = this.getByte() * (360d / 256d);
+            if (this.protocol >= ProtocolInfo.v1_1_0) {
+                this.flags = this.getByte();
+            }
         }
     }
 
@@ -57,16 +57,17 @@ public class MoveEntityPacket extends DataPacket {
             this.putFloat((float) this.y);
             this.putFloat((float) this.z);
             this.putByte((byte) (this.pitch / (360d / 256d)));
-            this.putByte((byte) (this.headYaw / (360d / 256d)));
             this.putByte((byte) (this.yaw / (360d / 256d)));
+            this.putByte((byte) (this.headYaw / (360d / 256d)));
         } else {
             this.putVarLong(this.eid);
             this.putVector3f((float) this.x, (float) this.y, (float) this.z);
             this.putByte((byte) (this.pitch / (360d / 256d)));
-            this.putByte((byte) (this.headYaw / (360d / 256d)));
             this.putByte((byte) (this.yaw / (360d / 256d)));
-            this.putBoolean(this.onGround);
-            this.putBoolean(this.teleport);
+            this.putByte((byte) (this.headYaw / (360d / 256d)));
+            if (this.protocol >= ProtocolInfo.v1_1_0) {
+                this.putByte((byte) this.flags);
+            }
         }
     }
 }

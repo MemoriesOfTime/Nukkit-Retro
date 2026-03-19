@@ -21,7 +21,7 @@ public class InventoryActionPacket extends DataPacket {
         this.reset();
         this.putUnsignedVarInt(this.actionId);
         this.putSlot(this.item);
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
+        if (this.protocol >= ProtocolInfo.v1_0_0_0) {
             this.putVarInt(this.enchantmentId);
             this.putVarInt(this.enchantmentLevel);
         }

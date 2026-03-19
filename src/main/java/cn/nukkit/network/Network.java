@@ -41,7 +41,6 @@ public class Network {
     private PacketPool packetPool91;
     private PacketPool packetPool92;
     private PacketPool packetPool100;
-    private PacketPool packetPool101;
     private PacketPool packetPool102;
     private PacketPool packetPool105;
     private PacketPool packetPool113;
@@ -149,6 +148,11 @@ public class Network {
     }
 
     public void processBatch(BatchPacket packet, Player player) {
+        if (Nukkit.DEBUG > 0) {
+            this.server.getLogger().info("[processBatch] packet.payload.length=" + (packet.payload != null ? packet.payload.length : "null")
+                    + " protocol=" + packet.protocol
+                    + (player != null ? " player.protocol=" + player.protocol : ""));
+        }
         byte[] data;
         try {
             data = this.inflateBatchPayload(packet.payload, player);
@@ -161,6 +165,10 @@ public class Network {
         }
 
         int len = data.length;
+        if (Nukkit.DEBUG > 0) {
+            this.server.getLogger().info("[processBatch] Inflated data length=" + len
+                    + " head=0x" + Binary.bytesToHexString(Binary.subBytes(data, 0, Math.min(len, 16))));
+        }
         @SupportedProtocol int protocol = packet.protocol != Integer.MAX_VALUE ? packet.protocol : (player == null ? ProtocolInfo.CURRENT_PROTOCOL : player.protocol);
 
         // 当协议版本未知时，从批量包数据中预检测协议版本
@@ -298,14 +306,20 @@ public class Network {
         BinaryStream stream = new BinaryStream(data);
         try {
             List<DataPacket> packets = new ArrayList<>();
+            this.consumeOptionalPacketCount(stream, len, protocol);
             while (stream.offset < len) {
                 byte[] buf = stream.getByteArray();
+                int packetId = this.resolveModernPacketId(buf);
+                int packetDataOffset = this.resolveModernPacketDataOffset(buf);
+                if (packetId < 0 || packetDataOffset < 0 || buf.length < packetDataOffset) {
+                    continue;
+                }
 
                 // 对于 LoginPacket，先检测协议版本
                 @SupportedProtocol int pktProtocol = protocol;
-                if ((buf[0] & 0xff) == (ProtocolInfo.LOGIN_PACKET & 0xff) && buf.length >= 5) {
-                    // 读取 clientProtocol 字段（偏移量 1 开始的 int）
-                    int clientProtocol = Binary.readInt(Binary.subBytes(buf, 1, 4));
+                if (packetId == (ProtocolInfo.LOGIN_PACKET & 0xff) && buf.length >= packetDataOffset + 4) {
+                    // 读取 clientProtocol 字段（包头之后的 int）
+                    int clientProtocol = Binary.readInt(Binary.subBytes(buf, packetDataOffset, 4));
                     if (ProtocolInfo.isSupportedProtocol(clientProtocol)) {
                         pktProtocol = ProtocolInfo.getPacketPoolProtocol(clientProtocol);
                         // 第一时间记录玩家协议版本
@@ -322,9 +336,9 @@ public class Network {
                 }
 
                 DataPacket pk;
-                if ((pk = this.getPacket(buf[0] & 0xff, pktProtocol)) != null) {
+                if ((pk = this.getPacket(packetId, pktProtocol)) != null) {
                     pk.protocol = pktProtocol;
-                    pk.setBuffer(buf, 1);
+                    pk.setBuffer(buf, packetDataOffset);
                     pk.decode();
                     packets.add(pk);
                 }
@@ -337,6 +351,101 @@ public class Network {
                 this.server.getLogger().debug("BatchPacket 0x" + Binary.bytesToHexString(packet.payload));
                 this.server.getLogger().logException(e);
             }
+        }
+    }
+
+    private void consumeOptionalPacketCount(BinaryStream stream, int len, @SupportedProtocol int protocol) {
+        if (ProtocolInfo.isBefore0160(protocol) || stream.getOffset() >= len) {
+            return;
+        }
+
+        int savedOffset = stream.getOffset();
+        int firstByte = stream.getBuffer()[savedOffset] & 0xff;
+        if (firstByte >= 0x80) {
+            return;
+        }
+
+        long possibleCount;
+        try {
+            possibleCount = stream.getUnsignedVarInt();
+        } catch (Exception ignored) {
+            stream.setOffset(savedOffset);
+            return;
+        }
+
+        if (possibleCount <= 0 || possibleCount > 256) {
+            stream.setOffset(savedOffset);
+            return;
+        }
+
+        int packetsStartOffset = stream.getOffset();
+        if (!this.canReadPacketCountBatch(stream.getBuffer(), len, packetsStartOffset, (int) possibleCount)) {
+            stream.setOffset(savedOffset);
+            return;
+        }
+
+        if (Nukkit.DEBUG > 1) {
+            this.server.getLogger().debug("processBatch: detected packetCount=" + possibleCount + " for protocol " + protocol);
+        }
+    }
+
+    private boolean canReadPacketCountBatch(byte[] data, int len, int offset, int packetCount) {
+        BinaryStream probe = new BinaryStream(data);
+        probe.setOffset(offset);
+
+        try {
+            for (int i = 0; i < packetCount; i++) {
+                if (probe.getOffset() >= len) {
+                    return false;
+                }
+
+                byte[] buf = probe.getByteArray();
+                if (buf.length < 1) {
+                    return false;
+                }
+            }
+
+            return probe.getOffset() == len;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private int resolveModernPacketId(byte[] buf) {
+        if (buf == null || buf.length < 1) {
+            return -1;
+        }
+
+        int first = buf[0] & 0xff;
+        if (first < 0x80) {
+            return first;
+        }
+
+        BinaryStream stream = new BinaryStream(buf);
+        try {
+            long header = stream.getUnsignedVarInt();
+            return (int) (header & 0x3ff);
+        } catch (Exception ignored) {
+            return first;
+        }
+    }
+
+    private int resolveModernPacketDataOffset(byte[] buf) {
+        if (buf == null || buf.length < 1) {
+            return -1;
+        }
+
+        int first = buf[0] & 0xff;
+        if (first < 0x80) {
+            return 1;
+        }
+
+        BinaryStream stream = new BinaryStream(buf);
+        try {
+            stream.getUnsignedVarInt();
+            return stream.getOffset();
+        } catch (Exception ignored) {
+            return 1;
         }
     }
 
@@ -455,17 +564,57 @@ public class Network {
             }
         }
 
-        // 尝试 0.16.0+ 格式：VarInt 长度 + [packetID, clientProtocol, ...]
+        // 尝试 1.1.x / 0.16.0+ 格式：[packetCount:VarInt][VarInt length][packet data]...
+        try {
+            BinaryStream stream = new BinaryStream(data);
+            long possibleCount = stream.getUnsignedVarInt();
+            if (possibleCount > 0 && possibleCount < 256 && stream.getCount() - stream.getOffset() >= 5) {
+                byte[] buf = stream.getByteArray();
+                int packetId = this.resolveModernPacketId(buf);
+                int packetDataOffset = this.resolveModernPacketDataOffset(buf);
+                if (Nukkit.DEBUG > 1) {
+                    this.server.getLogger().debug("detectProtocol: 1.1.x format, packetCount=" + possibleCount + ", buf.length=" + buf.length
+                            + ", packetId=0x" + Integer.toHexString(packetId));
+                }
+                if (packetId == (ProtocolInfo.LOGIN_PACKET & 0xff) && packetDataOffset > 0 && buf.length >= packetDataOffset + 4) {
+                    int clientProtocol = Binary.readInt(Binary.subBytes(buf, packetDataOffset, 4));
+                    if (Nukkit.DEBUG > 1) {
+                        this.server.getLogger().debug("detectProtocol: LoginPacket detected (with count), clientProtocol=" + clientProtocol);
+                    }
+                    if (ProtocolInfo.isSupportedProtocol(clientProtocol)) {
+                        return clientProtocol;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            if (Nukkit.DEBUG > 1) {
+                this.server.getLogger().debug("detectProtocol: 1.1.x format failed: " + e.getMessage());
+            }
+        }
+
+        // 尝试 0.16.0+ 格式（无 packetCount）：VarInt 长度 + [packetID, clientProtocol, ...]
         try {
             BinaryStream stream = new BinaryStream(data);
             byte[] buf = stream.getByteArray();
-            if (buf.length >= 5 && (buf[0] & 0xff) == (ProtocolInfo.LOGIN_PACKET & 0xff)) {
-                int clientProtocol = Binary.readInt(Binary.subBytes(buf, 1, 4));
+            int packetId = this.resolveModernPacketId(buf);
+            int packetDataOffset = this.resolveModernPacketDataOffset(buf);
+            if (Nukkit.DEBUG > 1) {
+                this.server.getLogger().debug("detectProtocol: 0.16.0+ format, buf.length=" + buf.length
+                        + ", packetId=0x" + Integer.toHexString(packetId));
+            }
+            if (packetId == (ProtocolInfo.LOGIN_PACKET & 0xff) && packetDataOffset > 0 && buf.length >= packetDataOffset + 4) {
+                int clientProtocol = Binary.readInt(Binary.subBytes(buf, packetDataOffset, 4));
+                if (Nukkit.DEBUG > 1) {
+                    this.server.getLogger().debug("detectProtocol: LoginPacket detected, clientProtocol=" + clientProtocol);
+                }
                 if (ProtocolInfo.isSupportedProtocol(clientProtocol)) {
                     return clientProtocol;
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            if (Nukkit.DEBUG > 1) {
+                this.server.getLogger().debug("detectProtocol: 0.16.0+ format failed: " + e.getMessage());
+            }
         }
 
         // 再尝试 0.15.x 格式：4字节 int 长度 + [packetID(0x01), clientProtocol, ...]
@@ -716,15 +865,13 @@ public class Network {
                 return this.packetPool91;
             case ProtocolInfo.v1_0_0_0:
                 return this.packetPool92;
-            case ProtocolInfo.v1_0_0:
+            case ProtocolInfo.v1_0_0: // v1.0.0 through v1.0.3 share protocol 100
                 return this.packetPool100;
-            case ProtocolInfo.v1_0_3:
-                return this.packetPool101;
             case ProtocolInfo.v1_0_4:
                 return this.packetPool102;
             case ProtocolInfo.v1_0_5:
                 return this.packetPool105;
-            case ProtocolInfo.v1_1_0:
+            case ProtocolInfo.v1_1_3:
             default:
                 return this.packetPool113;
         }
@@ -753,11 +900,8 @@ public class Network {
             case ProtocolInfo.v1_0_0_0:
                 this.packetPool92 = packetPool;
                 break;
-            case ProtocolInfo.v1_0_0:
+            case ProtocolInfo.v1_0_0: // v1.0.0 through v1.0.3 share protocol 100
                 this.packetPool100 = packetPool;
-                break;
-            case ProtocolInfo.v1_0_3:
-                this.packetPool101 = packetPool;
                 break;
             case ProtocolInfo.v1_0_4:
                 this.packetPool102 = packetPool;
@@ -765,7 +909,7 @@ public class Network {
             case ProtocolInfo.v1_0_5:
                 this.packetPool105 = packetPool;
                 break;
-            case ProtocolInfo.v1_1_0:
+            case ProtocolInfo.v1_1_3:
             default:
                 this.packetPool113 = packetPool;
                 break;
@@ -801,92 +945,91 @@ public class Network {
         PacketPool.Builder pool91 = this.newBuilder(ProtocolInfo.v0_16_0);
         PacketPool.Builder pool92 = this.newBuilder(ProtocolInfo.v1_0_0_0);
         PacketPool.Builder pool100 = this.newBuilder(ProtocolInfo.v1_0_0);
-        PacketPool.Builder pool101 = this.newBuilder(ProtocolInfo.v1_0_3);
         PacketPool.Builder pool102 = this.newBuilder(ProtocolInfo.v1_0_4);
         PacketPool.Builder pool105 = this.newBuilder(ProtocolInfo.v1_0_5);
-        PacketPool.Builder pool113 = this.newBuilder(ProtocolInfo.v1_1_0);
+        PacketPool.Builder pool113 = this.newBuilder(ProtocolInfo.v1_1_3);
 
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ADD_ENTITY_PACKET, AddEntityPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ADD_HANGING_ENTITY_PACKET, AddHangingEntityPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ADD_ITEM_ENTITY_PACKET, AddItemEntityPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ADD_ITEM_PACKET, AddItemPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ADD_PAINTING_PACKET, AddPaintingPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ADD_PLAYER_PACKET, AddPlayerPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ADVENTURE_SETTINGS_PACKET, AdventureSettingsPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ANIMATE_PACKET, AnimatePacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.AVAILABLE_COMMANDS_PACKET, AvailableCommandsPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.BATCH_PACKET, BatchPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.BLOCK_ENTITY_DATA_PACKET, BlockEntityDataPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.BLOCK_EVENT_PACKET, BlockEventPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.BLOCK_PICK_REQUEST_PACKET, BlockPickRequestPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.BOSS_EVENT_PACKET, BossEventPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.CHANGE_DIMENSION_PACKET, ChangeDimensionPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.CHUNK_RADIUS_UPDATED_PACKET, ChunkRadiusUpdatedPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.CLIENTBOUND_MAP_ITEM_DATA_PACKET, ClientboundMapItemDataPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.COMMAND_STEP_PACKET, CommandStepPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.CONTAINER_CLOSE_PACKET, ContainerClosePacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.CONTAINER_OPEN_PACKET, ContainerOpenPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.CONTAINER_SET_CONTENT_PACKET, ContainerSetContentPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.CONTAINER_SET_DATA_PACKET, ContainerSetDataPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.CONTAINER_SET_SLOT_PACKET, ContainerSetSlotPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.CRAFTING_DATA_PACKET, CraftingDataPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.CRAFTING_EVENT_PACKET, CraftingEventPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.DISCONNECT_PACKET, DisconnectPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.DROP_ITEM_PACKET, DropItemPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ENTITY_EVENT_PACKET, EntityEventPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ENTITY_FALL_PACKET, EntityFallPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.EXPLODE_PACKET, ExplodePacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.FULL_CHUNK_DATA_PACKET, FullChunkDataPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.GAME_RULES_CHANGED_PACKET, GameRulesChangedPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.HURT_ARMOR_PACKET, HurtArmorPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.INTERACT_PACKET, InteractPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.INVENTORY_ACTION_PACKET, InventoryActionPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.ITEM_FRAME_DROP_ITEM_PACKET, ItemFrameDropItemPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.LEVEL_EVENT_PACKET, LevelEventPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.LEVEL_SOUND_EVENT_PACKET, LevelSoundEventPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.LOGIN_PACKET, LoginPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.MAP_INFO_REQUEST_PACKET, MapInfoRequestPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.MOB_ARMOR_EQUIPMENT_PACKET, MobArmorEquipmentPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.MOB_EQUIPMENT_PACKET, MobEquipmentPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.MOVE_ENTITY_PACKET, MoveEntityPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.MOVE_PLAYER_PACKET, MovePlayerPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.PLAYER_ACTION_PACKET, PlayerActionPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.PLAYER_INPUT_PACKET, PlayerInputPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.PLAYER_LIST_PACKET, PlayerListPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.PLAY_SOUND_PACKET, PlaySoundPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.PLAY_STATUS_PACKET, PlayStatusPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.REMOVE_BLOCK_PACKET, RemoveBlockPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.REMOVE_ENTITY_PACKET, RemoveEntityPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.REPLACE_ITEM_IN_SLOT_PACKET, ReplaceItemInSlotPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.REQUEST_CHUNK_RADIUS_PACKET, RequestChunkRadiusPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACKS_INFO_PACKET, ResourcePacksInfoPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACK_STACK_PACKET, ResourcePackStackPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACK_CLIENT_RESPONSE_PACKET, ResourcePackClientResponsePacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACK_DATA_INFO_PACKET, ResourcePackDataInfoPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACK_CHUNK_DATA_PACKET, ResourcePackChunkDataPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACK_CHUNK_REQUEST_PACKET, ResourcePackChunkRequestPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.RESPAWN_PACKET, RespawnPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.RIDER_JUMP_PACKET, RiderJumpPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SET_COMMANDS_ENABLED_PACKET, SetCommandsEnabledPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SET_DIFFICULTY_PACKET, SetDifficultyPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SET_ENTITY_DATA_PACKET, SetEntityDataPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SET_ENTITY_LINK_PACKET, SetEntityLinkPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SET_ENTITY_MOTION_PACKET, SetEntityMotionPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SET_HEALTH_PACKET, SetHealthPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SET_PLAYER_GAME_TYPE_PACKET, SetPlayerGameTypePacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SET_SPAWN_POSITION_PACKET, SetSpawnPositionPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SET_TITLE_PACKET, SetTitlePacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SET_TIME_PACKET, SetTimePacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SHOW_CREDITS_PACKET, ShowCreditsPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.SPAWN_EXPERIENCE_ORB_PACKET, SpawnExperienceOrbPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.START_GAME_PACKET, StartGamePacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.TAKE_ITEM_ENTITY_PACKET, TakeItemEntityPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.TEXT_PACKET, TextPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.UPDATE_BLOCK_PACKET, UpdateBlockPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.USE_ITEM_PACKET, UseItemPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.UPDATE_TRADE_PACKET, UpdateTradePacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.MOB_EFFECT_PACKET, MobEffectPacket.class);
-        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool101, pool102, pool105, pool113, ProtocolInfo.UPDATE_ATTRIBUTES_PACKET, UpdateAttributesPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ADD_ENTITY_PACKET, AddEntityPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ADD_HANGING_ENTITY_PACKET, AddHangingEntityPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ADD_ITEM_ENTITY_PACKET, AddItemEntityPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ADD_ITEM_PACKET, AddItemPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ADD_PAINTING_PACKET, AddPaintingPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ADD_PLAYER_PACKET, AddPlayerPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ADVENTURE_SETTINGS_PACKET, AdventureSettingsPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ANIMATE_PACKET, AnimatePacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.AVAILABLE_COMMANDS_PACKET, AvailableCommandsPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.BATCH_PACKET, BatchPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.BLOCK_ENTITY_DATA_PACKET, BlockEntityDataPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.BLOCK_EVENT_PACKET, BlockEventPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.BLOCK_PICK_REQUEST_PACKET, BlockPickRequestPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.BOSS_EVENT_PACKET, BossEventPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.CHANGE_DIMENSION_PACKET, ChangeDimensionPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.CHUNK_RADIUS_UPDATED_PACKET, ChunkRadiusUpdatedPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.CLIENTBOUND_MAP_ITEM_DATA_PACKET, ClientboundMapItemDataPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.COMMAND_STEP_PACKET, CommandStepPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.CONTAINER_CLOSE_PACKET, ContainerClosePacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.CONTAINER_OPEN_PACKET, ContainerOpenPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.CONTAINER_SET_CONTENT_PACKET, ContainerSetContentPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.CONTAINER_SET_DATA_PACKET, ContainerSetDataPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.CONTAINER_SET_SLOT_PACKET, ContainerSetSlotPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.CRAFTING_DATA_PACKET, CraftingDataPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.CRAFTING_EVENT_PACKET, CraftingEventPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.DISCONNECT_PACKET, DisconnectPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.DROP_ITEM_PACKET, DropItemPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ENTITY_EVENT_PACKET, EntityEventPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ENTITY_FALL_PACKET, EntityFallPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.EXPLODE_PACKET, ExplodePacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.FULL_CHUNK_DATA_PACKET, FullChunkDataPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.GAME_RULES_CHANGED_PACKET, GameRulesChangedPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.HURT_ARMOR_PACKET, HurtArmorPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.INTERACT_PACKET, InteractPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.INVENTORY_ACTION_PACKET, InventoryActionPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.ITEM_FRAME_DROP_ITEM_PACKET, ItemFrameDropItemPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.LEVEL_EVENT_PACKET, LevelEventPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.LEVEL_SOUND_EVENT_PACKET, LevelSoundEventPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.LOGIN_PACKET, LoginPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.MAP_INFO_REQUEST_PACKET, MapInfoRequestPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.MOB_ARMOR_EQUIPMENT_PACKET, MobArmorEquipmentPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.MOB_EQUIPMENT_PACKET, MobEquipmentPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.MOVE_ENTITY_PACKET, MoveEntityPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.MOVE_PLAYER_PACKET, MovePlayerPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.PLAYER_ACTION_PACKET, PlayerActionPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.PLAYER_INPUT_PACKET, PlayerInputPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.PLAYER_LIST_PACKET, PlayerListPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.PLAY_SOUND_PACKET, PlaySoundPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.PLAY_STATUS_PACKET, PlayStatusPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.REMOVE_BLOCK_PACKET, RemoveBlockPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.REMOVE_ENTITY_PACKET, RemoveEntityPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.REPLACE_ITEM_IN_SLOT_PACKET, ReplaceItemInSlotPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.REQUEST_CHUNK_RADIUS_PACKET, RequestChunkRadiusPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACKS_INFO_PACKET, ResourcePacksInfoPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACK_STACK_PACKET, ResourcePackStackPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACK_CLIENT_RESPONSE_PACKET, ResourcePackClientResponsePacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACK_DATA_INFO_PACKET, ResourcePackDataInfoPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACK_CHUNK_DATA_PACKET, ResourcePackChunkDataPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.RESOURCE_PACK_CHUNK_REQUEST_PACKET, ResourcePackChunkRequestPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.RESPAWN_PACKET, RespawnPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.RIDER_JUMP_PACKET, RiderJumpPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SET_COMMANDS_ENABLED_PACKET, SetCommandsEnabledPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SET_DIFFICULTY_PACKET, SetDifficultyPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SET_ENTITY_DATA_PACKET, SetEntityDataPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SET_ENTITY_LINK_PACKET, SetEntityLinkPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SET_ENTITY_MOTION_PACKET, SetEntityMotionPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SET_HEALTH_PACKET, SetHealthPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SET_PLAYER_GAME_TYPE_PACKET, SetPlayerGameTypePacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SET_SPAWN_POSITION_PACKET, SetSpawnPositionPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SET_TITLE_PACKET, SetTitlePacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SET_TIME_PACKET, SetTimePacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SHOW_CREDITS_PACKET, ShowCreditsPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.SPAWN_EXPERIENCE_ORB_PACKET, SpawnExperienceOrbPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.START_GAME_PACKET, StartGamePacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.TAKE_ITEM_ENTITY_PACKET, TakeItemEntityPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.TEXT_PACKET, TextPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.UPDATE_BLOCK_PACKET, UpdateBlockPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.USE_ITEM_PACKET, UseItemPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.UPDATE_TRADE_PACKET, UpdateTradePacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.MOB_EFFECT_PACKET, MobEffectPacket.class);
+        this.registerPacketAcrossPools(pool60, pool81, pool84, pool91, pool92, pool100, pool102, pool105, pool113, ProtocolInfo.UPDATE_ATTRIBUTES_PACKET, UpdateAttributesPacket.class);
         pool60.registerPacket(0x97, RemovePlayerPacket.class);
 
         this.packetPool60 = pool60.build();
@@ -913,7 +1056,6 @@ public class Network {
         this.packetPool91 = pool91.build();
         this.packetPool92 = pool92.build();
         this.packetPool100 = pool100.build();
-        this.packetPool101 = pool101.build();
         this.packetPool102 = pool102.build();
         this.packetPool105 = pool105.build();
         this.packetPool113 = pool113.build();
@@ -931,7 +1073,6 @@ public class Network {
                                                                   PacketPool.Builder pool91,
                                                                   PacketPool.Builder pool92,
                                                                   PacketPool.Builder pool100,
-                                                                  PacketPool.Builder pool101,
                                                                   PacketPool.Builder pool102,
                                                                   PacketPool.Builder pool105,
                                                                   PacketPool.Builder pool113,
@@ -943,10 +1084,9 @@ public class Network {
         this.registerTranslatedPacket(pool91, ProtocolInfo.v0_16_0, currentId, clazz);
         this.registerTranslatedPacket(pool92, ProtocolInfo.v1_0_0_0, currentId, clazz);
         this.registerTranslatedPacket(pool100, ProtocolInfo.v1_0_0, currentId, clazz);
-        this.registerTranslatedPacket(pool101, ProtocolInfo.v1_0_3, currentId, clazz);
         this.registerTranslatedPacket(pool102, ProtocolInfo.v1_0_4, currentId, clazz);
         this.registerTranslatedPacket(pool105, ProtocolInfo.v1_0_5, currentId, clazz);
-        this.registerTranslatedPacket(pool113, ProtocolInfo.v1_1_0, currentId, clazz);
+        this.registerTranslatedPacket(pool113, ProtocolInfo.v1_1_3, currentId, clazz);
     }
 
     private <T extends DataPacket> void registerTranslatedPacket(PacketPool.Builder builder, @SupportedProtocol int protocol, byte currentId, Class<T> clazz) {
@@ -957,9 +1097,6 @@ public class Network {
     }
 
     private int translatePacketId(@SupportedProtocol int protocol, int currentId) {
-        if (protocol == ProtocolInfo.v1_1_0) {
-            return currentId;
-        }
         if (ProtocolInfo.getPacketPoolProtocol(protocol) == ProtocolInfo.v0_14_2) {
             return this.translatePacketIdFrom014(currentId);
         }
@@ -1009,26 +1146,6 @@ public class Network {
                 }
                 if (currentId >= 0x53 && currentId <= 0x56) {
                     return currentId - 3;
-                }
-                return -1;
-            case ProtocolInfo.v1_0_3:
-                if (currentId >= 0x06 && currentId <= 0x21) {
-                    return currentId + 1;
-                }
-                if (currentId == 0x22 || currentId == 0x40 || currentId == 0x4d || currentId == 0x50 || currentId == 0x51 || currentId == 0x52) {
-                    return -1;
-                }
-                if (currentId >= 0x23 && currentId <= 0x3f) {
-                    return currentId;
-                }
-                if (currentId >= 0x41 && currentId <= 0x4c) {
-                    return currentId - 1;
-                }
-                if (currentId >= 0x4e && currentId <= 0x4f) {
-                    return currentId - 1;
-                }
-                if (currentId >= 0x53 && currentId <= 0x56) {
-                    return currentId - 4;
                 }
                 return -1;
             case ProtocolInfo.v1_0_0:

@@ -2,7 +2,6 @@ package cn.nukkit.network.protocol;
 
 import cn.nukkit.entity.data.EntityMetadata;
 import cn.nukkit.item.Item;
-import cn.nukkit.utils.Binary;
 
 /**
  * author: MagicDroidX
@@ -35,7 +34,7 @@ public class AddItemEntityPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.putLong(this.entityRuntimeId);
         } else {
             this.putVarLong(this.entityUniqueId);
@@ -52,9 +51,6 @@ public class AddItemEntityPacket extends DataPacket {
         } else {
             this.putVector3f(this.x, this.y, this.z);
             this.putVector3f(this.speedX, this.speedY, this.speedZ);
-        }
-        if (!ProtocolInfo.isLegacyProtocol(this.protocol)) {
-            this.put(Binary.writeMetadata(metadata));
         }
     }
 }

@@ -34,6 +34,7 @@ import cn.nukkit.level.format.generic.EmptyChunkSection;
 import cn.nukkit.level.format.leveldb.LevelDB;
 import cn.nukkit.level.format.mcregion.McRegion;
 import cn.nukkit.level.generator.Generator;
+import cn.nukkit.level.generator.biome.Biome;
 import cn.nukkit.level.generator.task.*;
 import cn.nukkit.level.particle.DestroyBlockParticle;
 import cn.nukkit.level.particle.Particle;
@@ -2296,6 +2297,11 @@ public class Level implements ChunkManager, Metadatable {
         return this.getChunk(chunkX, chunkZ, false);
     }
 
+    private static int getLegacyNibble(byte[] data, int index, boolean upper) {
+        int value = data[index] & 0xff;
+        return upper ? ((value >>> 4) & 0x0f) : (value & 0x0f);
+    }
+
     public BaseFullChunk getChunk(int chunkX, int chunkZ, boolean create) {
         Long index = Level.chunkHash(chunkX, chunkZ);
         if (this.chunks.containsKey(index)) {
@@ -2993,17 +2999,13 @@ public class Level implements ChunkManager, Metadatable {
         this.addChunkPacket(chunkX, chunkZ, pk);
     }
 
-    public void addEntityMovement(int chunkX, int chunkZ, long entityId, double x, double y, double z, double yaw, double pitch, double headYaw) {
-        MoveEntityPacket pk = new MoveEntityPacket();
-        pk.eid = entityId;
-        pk.x = (float) x;
-        pk.y = (float) y;
-        pk.z = (float) z;
-        pk.yaw = (float) yaw;
-        pk.headYaw = (float) yaw;
-        pk.pitch = (float) pitch;
-
-        this.addChunkPacket(chunkX, chunkZ, pk);
+    private static void setLegacyNibble(byte[] data, int index, int value, boolean upper) {
+        int current = data[index] & 0xff;
+        if (upper) {
+            data[index] = (byte) ((current & 0x0f) | ((value & 0x0f) << 4));
+        } else {
+            data[index] = (byte) ((current & 0xf0) | (value & 0x0f));
+        }
     }
 
     public boolean isRaining() {
@@ -3314,6 +3316,155 @@ public class Level implements ChunkManager, Metadatable {
         }
 
         return stream.getBuffer();
+    }
+
+    public BaseFullChunk getLoadedChunk(int chunkX, int chunkZ) {
+        return this.chunks.get(Level.chunkHash(chunkX, chunkZ));
+    }
+
+    public void addEntityMovement(int chunkX, int chunkZ, long entityId, double x, double y, double z, double yaw, double pitch, double headYaw) {
+        MoveEntityPacket pk = new MoveEntityPacket();
+        pk.eid = entityId;
+        pk.x = (float) x;
+        pk.y = (float) y;
+        pk.z = (float) z;
+        pk.yaw = (float) yaw;
+        pk.headYaw = (float) headYaw;
+        pk.pitch = (float) pitch;
+
+        this.addChunkPacket(chunkX, chunkZ, pk);
+    }
+
+    /**
+     * 将 anvil provider 缓存的新版 section payload 转换为 0.13 - 0.15 使用的 ORDER_LAYERED 格式。
+     * 主要用于 chunk 对象已卸载、只能命中 payload 缓存时的旧版客户端兜底。
+     */
+    public byte[] convertCachedAnvilPayloadToLegacyPayload(byte[] payload) {
+        if (payload == null || payload.length == 0) {
+            return null;
+        }
+
+        try {
+            BinaryStream input = new BinaryStream(payload);
+            int sectionCount = input.getByte();
+            if (sectionCount < 0 || sectionCount > 16) {
+                return null;
+            }
+
+            byte[][] legacyBlocks = new byte[8][4096];
+            byte[][] legacyData = new byte[8][2048];
+            byte[][] legacySkyLight = new byte[8][2048];
+            byte[][] legacyBlockLight = new byte[8][2048];
+
+            for (byte[] sectionSkyLight : legacySkyLight) {
+                Arrays.fill(sectionSkyLight, (byte) 0xff);
+            }
+
+            for (int sectionY = 0; sectionY < sectionCount; sectionY++) {
+                if (input.getCount() - input.getOffset() < 10241) {
+                    return null;
+                }
+
+                int sectionVersion = input.getByte();
+                if (sectionVersion != 0) {
+                    return null;
+                }
+
+                byte[] sectionPayload = input.get(10240);
+                if (sectionY < 8) {
+                    this.convertModernAnvilSectionToLegacy(sectionPayload,
+                            legacyBlocks[sectionY],
+                            legacyData[sectionY],
+                            legacySkyLight[sectionY],
+                            legacyBlockLight[sectionY]);
+                }
+            }
+
+            if (input.getCount() - input.getOffset() < 769) {
+                return null;
+            }
+
+            byte[] encodedHeightMap = input.get(512);
+            byte[] heightMap = new byte[256];
+            for (int i = 0; i < heightMap.length; i++) {
+                heightMap[i] = encodedHeightMap[i << 1];
+            }
+            byte[] biomeIds = input.get(256);
+            input.getByte(); // border blocks count，当前固定为 0
+
+            long extraDataCountLong = input.getUnsignedVarInt();
+            if (extraDataCountLong < 0 || extraDataCountLong > Integer.MAX_VALUE) {
+                return null;
+            }
+            int extraDataCount = (int) extraDataCountLong;
+
+            BinaryStream output = new BinaryStream();
+            for (int i = 0; i < 8; i++) {
+                output.put(legacyBlocks[i]);
+            }
+            for (int i = 0; i < 8; i++) {
+                output.put(legacyData[i]);
+            }
+            for (int i = 0; i < 8; i++) {
+                output.put(legacySkyLight[i]);
+            }
+            for (int i = 0; i < 8; i++) {
+                output.put(legacyBlockLight[i]);
+            }
+
+            output.put(heightMap);
+            for (byte biomeIdByte : biomeIds) {
+                int biomeId = biomeIdByte & 0xff;
+                Biome biome = Biome.getBiome(biomeId);
+                int rgb = biome != null ? biome.getColor() : 0;
+                int color = ((biomeId & 0xff) << 24) | (rgb & 0xffffff);
+                output.put(Binary.writeInt(color));
+            }
+
+            output.putLInt(extraDataCount);
+            for (int i = 0; i < extraDataCount; i++) {
+                int key = (int) input.getUnsignedVarInt();
+                int value = input.getLShort();
+                output.putLInt(key);
+                output.putLShort(value);
+            }
+
+            output.put(input.get());
+            return output.getBuffer();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void convertModernAnvilSectionToLegacy(byte[] sectionPayload, byte[] legacyBlocks, byte[] legacyData,
+                                                   byte[] legacySkyLight, byte[] legacyBlockLight) {
+        final int blocksOffset = 0;
+        final int dataOffset = 4096;
+        final int skyLightOffset = 6144;
+        final int blockLightOffset = 8192;
+
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                int modernBlockBase = (x << 8) | (z << 4);
+                int modernNibbleBase = (x << 7) | (z << 3);
+                for (int y = 0; y < 16; y++) {
+                    int legacyBlockIndex = (y << 8) | (z << 4) | x;
+                    legacyBlocks[legacyBlockIndex] = sectionPayload[blocksOffset + modernBlockBase + y];
+
+                    int modernNibbleIndex = modernNibbleBase | (y >> 1);
+                    int legacyNibbleIndex = (y << 7) | (z << 3) | (x >> 1);
+                    boolean modernUpper = (y & 1) != 0;
+                    boolean legacyUpper = (x & 1) != 0;
+
+                    setLegacyNibble(legacyData, legacyNibbleIndex,
+                            getLegacyNibble(sectionPayload, dataOffset + modernNibbleIndex, modernUpper), legacyUpper);
+                    setLegacyNibble(legacySkyLight, legacyNibbleIndex,
+                            getLegacyNibble(sectionPayload, skyLightOffset + modernNibbleIndex, modernUpper), legacyUpper);
+                    setLegacyNibble(legacyBlockLight, legacyNibbleIndex,
+                            getLegacyNibble(sectionPayload, blockLightOffset + modernNibbleIndex, modernUpper), legacyUpper);
+                }
+            }
+        }
     }
 
     /**

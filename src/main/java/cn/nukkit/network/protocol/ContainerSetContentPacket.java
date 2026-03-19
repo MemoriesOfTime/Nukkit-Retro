@@ -34,10 +34,10 @@ public class ContainerSetContentPacket extends DataPacket {
 
     @Override
     public void decode() {
-        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.windowid = this.getByte();
             this.eid = 0;
-        } else if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+        } else if (this.protocol < ProtocolInfo.v1_1_0) {
             this.windowid = this.getByte();
             this.eid = 0;
         } else {
@@ -57,7 +57,7 @@ public class ContainerSetContentPacket extends DataPacket {
         }
 
         count = (ProtocolInfo.isBefore0160(this.protocol)) ? this.getShort() : (int) this.getUnsignedVarInt();
-        if ((ProtocolInfo.isLegacyProtocol(this.protocol) && this.windowid != SPECIAL_INVENTORY)) {
+        if (this.protocol >= ProtocolInfo.v0_16_0 && this.protocol < ProtocolInfo.v1_1_0 && this.windowid != SPECIAL_INVENTORY) {
             this.hotbar = new int[0];
             for (int s = 0; s < count && !this.feof(); ++s) {
                 if (ProtocolInfo.isBefore0160(this.protocol)) {
@@ -77,7 +77,7 @@ public class ContainerSetContentPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        if ((ProtocolInfo.isBefore0160(this.protocol))) {
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.putByte((byte) this.windowid);
             this.putShort(this.slots.length);
             for (Item slot : this.slots) {
@@ -95,7 +95,7 @@ public class ContainerSetContentPacket extends DataPacket {
             return;
         }
 
-        if (ProtocolInfo.isLegacyProtocol(this.protocol)) {
+        if (this.protocol < ProtocolInfo.v1_1_0) {
             this.putByte((byte) this.windowid);
         } else {
             this.putUnsignedVarInt(this.windowid);

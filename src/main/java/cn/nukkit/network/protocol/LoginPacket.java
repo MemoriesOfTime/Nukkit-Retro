@@ -75,7 +75,9 @@ public class LoginPacket extends DataPacket {
             if (Nukkit.DEBUG > 1) {
                 Server.getInstance().getLogger().debug("LoginPacket.decode: 0.16.0+ format, gameEdition=" + this.gameEdition);
             }
-            if (ProtocolInfo.isLegacyProtocol(this.clientProtocol)) {
+            if (this.clientProtocol >= ProtocolInfo.v1_1_0) {
+                this.setBuffer(this.getByteArray(), 0);
+            } else if (this.clientProtocol < ProtocolInfo.v1_1_0) {
                 byte[] str;
                 try {
                     byte[] compressed = this.get((int) this.getUnsignedVarInt());

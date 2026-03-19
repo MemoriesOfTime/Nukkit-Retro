@@ -127,7 +127,7 @@ public class LevelSoundEventPacket extends DataPacket {
     @Override
     public void decode() {
         int rawSound = this.getByte();
-        this.sound = ProtocolInfo.isLegacyProtocol(this.protocol) ? fromLegacySound(rawSound) : rawSound;
+        this.sound = this.protocol < ProtocolInfo.v1_1_0 ? fromLegacySound(rawSound) : rawSound;
         Vector3f v = this.getVector3f();
         this.x = v.x;
         this.y = v.y;
@@ -141,7 +141,7 @@ public class LevelSoundEventPacket extends DataPacket {
     @Override
     public void encode() {
         this.reset();
-        this.putByte((byte) (ProtocolInfo.isLegacyProtocol(this.protocol) ? toLegacySound(this.sound) : this.sound));
+        this.putByte((byte) (this.protocol < ProtocolInfo.v1_1_0 ? toLegacySound(this.sound) : this.sound));
         this.putVector3f(this.x, this.y, this.z);
         this.putVarInt(this.extraData);
         this.putVarInt(this.pitch);
