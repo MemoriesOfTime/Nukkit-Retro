@@ -1050,6 +1050,7 @@ public class Network {
                 .deregisterPacket(0xc1)
                 .deregisterPacket(0xc2)
                 .deregisterPacket(0xc5)
+                .registerPacket(0x1b, TransferPacket.class)
                 .build();
         this.packetPool81 = pool81.build();
         this.packetPool84 = pool84.build();
