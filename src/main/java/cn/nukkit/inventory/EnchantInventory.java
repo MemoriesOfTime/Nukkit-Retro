@@ -2,11 +2,13 @@ package cn.nukkit.inventory;
 
 import cn.nukkit.Player;
 import cn.nukkit.Server;
+import cn.nukkit.block.Block;
 import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemBookEnchanted;
 import cn.nukkit.item.enchantment.Enchantment;
 import cn.nukkit.item.enchantment.EnchantmentEntry;
 import cn.nukkit.item.enchantment.EnchantmentList;
+import cn.nukkit.level.Level;
 import cn.nukkit.level.Position;
 import cn.nukkit.math.NukkitRandom;
 import cn.nukkit.network.protocol.CraftingDataPacket;
@@ -218,8 +220,34 @@ public class EnchantInventory extends ContainerInventory {
     }
 
     public int countBookshelf() {
-        return 15;
-        //todo calculate bookshelf
+        Position pos = this.getHolder();
+        Level level = pos.getLevel();
+        int baseX = pos.getFloorX();
+        int baseY = pos.getFloorY();
+        int baseZ = pos.getFloorZ();
+        int count = 0;
+
+        for (int x = baseX - 2; x <= baseX + 2; x++) {
+            for (int z = baseZ - 2; z <= baseZ + 2; z++) {
+                if (Math.abs(x - baseX) <= 1 && Math.abs(z - baseZ) <= 1) {
+                    continue; //the 3x3 area around the table is ignored
+                }
+
+                //a bookshelf only counts if the space between it and the table is open
+                int middleX = baseX + Integer.signum(x - baseX);
+                int middleZ = baseZ + Integer.signum(z - baseZ);
+
+                for (int y = baseY; y <= baseY + 1; y++) {
+                    if (level.getBlockIdAt(x, y, z) == Block.BOOKSHELF
+                            && level.getBlockIdAt(middleX, y, middleZ) == Block.AIR
+                            && level.getBlockIdAt(middleX, y + 1, middleZ) == Block.AIR) {
+                        count++;
+                    }
+                }
+            }
+        }
+
+        return count;
     }
 
     public void sendEnchantmentList() {

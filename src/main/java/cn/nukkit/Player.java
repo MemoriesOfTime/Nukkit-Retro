@@ -3054,6 +3054,10 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         break;
                     }
 
+                    if (craftingEventPacket.output == null || craftingEventPacket.output.length == 0) {
+                        break;
+                    }
+
                     Recipe recipe = this.server.getCraftingManager().getRecipe(craftingEventPacket.id);
 
                     if (this.craftingType == CRAFTING_ANVIL) {
@@ -3077,15 +3081,11 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                             }
                         }
 
-                        if (recipe == null) {
-                            //Item renamed
-
-                            if (!anvilInventory.onRename(this, craftingEventPacket.output[0])) {
-                                this.getServer().getLogger().debug(this.getName() + " failed to rename an item in an anvil");
-                                this.inventory.sendContents(this);
-                            }
-                        } else {
-                            //TODO: Anvil crafting recipes
+                        if (!anvilInventory.onProcess(this, craftingEventPacket.output[0])) {
+                            //rename, repair, enchanted book or enchantment combining failed
+                            this.getServer().getLogger().debug(this.getName() + " failed to process an item in an anvil");
+                            this.inventory.sendContents(this);
+                            anvilInventory.sendContents(this);
                         }
                         break;
                     } else if (!this.windowIndex.containsKey(craftingEventPacket.windowId)) {

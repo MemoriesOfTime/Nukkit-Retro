@@ -96,15 +96,9 @@ public class BlockAnvil extends BlockFallable {
 
     @Override
     public Item[] getDrops(Item item) {
-        int damage = this.getDamage();
         if (item.isPickaxe() && item.getTier() >= ItemTool.TIER_WOODEN) {
-            Item drop = this.toItem();
-
-            if (damage >= 4 && damage <= 7) { //Slightly Anvil
-                drop.setDamage(drop.getDamage() & 0x04);
-            } else if (damage >= 8 && damage <= 11) { //Very Damaged Anvil
-                drop.setDamage(drop.getDamage() & 0x08);
-            }
+            int damage = this.getDamage() & 0x0c; //keep the damage stage, drop the facing bits
+            return new Item[]{Item.get(Item.ANVIL, damage)};
         }
         return new Item[0];
     }

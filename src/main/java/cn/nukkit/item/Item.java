@@ -1278,6 +1278,7 @@ public class Item implements Cloneable {
         addCreativeItem(Item.get(Item.NETHER_QUARTZ, 0));
         addCreativeItem(Item.get(Item.PAPER, 0));
         addCreativeItem(Item.get(Item.BOOK, 0));
+        addCreativeItem(Item.get(Item.ENCHANTED_BOOK, 0));
         addCreativeItem(Item.get(Item.ARROW, 0));
         addCreativeItem(Item.get(Item.BONE, 0));
         addCreativeItem(Item.get(Item.EMPTY_MAP, 0));
