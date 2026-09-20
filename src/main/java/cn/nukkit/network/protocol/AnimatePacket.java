@@ -17,7 +17,7 @@ public class AnimatePacket extends DataPacket {
             this.action = this.getByte();
             this.eid = this.getLong();
         } else {
-            this.action = (int) this.getUnsignedVarInt();
+            this.action = (int) this.getVarInt();
             this.eid = getVarLong();
         }
         if (this.protocol >= ProtocolInfo.v1_1_0 && (this.action & 0x80) != 0) {
@@ -32,7 +32,7 @@ public class AnimatePacket extends DataPacket {
             this.putByte((byte) this.action);
             this.putLong(this.eid);
         } else {
-            this.putUnsignedVarInt(this.action);
+            this.putVarInt(this.action);
             this.putVarLong(this.eid);
         }
         if (this.protocol >= ProtocolInfo.v1_1_0 && (this.action & 0x80) != 0) {
