@@ -1018,6 +1018,44 @@ class Legacy100PacketTest {
     }
 
     @Test
+    void animateSwingShouldEncodeAcrossSupportedProtocols() {
+        for (int protocol : ProtocolInfo.SUPPORTED_PROTOCOLS) {
+            AnimatePacket packet = new AnimatePacket();
+            packet.protocol = protocol;
+            packet.action = 1;
+            packet.eid = 7L;
+            packet.encode();
+
+            // 0.16+ 使用 ZigZag：action=1 编码为 0x02，eid=7 编码为 0x0e。
+            byte[] expected = protocol < ProtocolInfo.v0_16_0
+                    ? new byte[]{1, 0, 0, 0, 0, 0, 0, 0, 7}
+                    : new byte[]{2, 14};
+            assertArrayEquals(expected, Arrays.copyOfRange(packet.getBuffer(), 1, packet.getBuffer().length),
+                    "protocol=" + protocol);
+        }
+    }
+
+    @Test
+    void animateSwingShouldDecodeAcrossSupportedProtocols() {
+        for (int protocol : ProtocolInfo.SUPPORTED_PROTOCOLS) {
+            // 使用固定报文，避免编解码同时出错时往返测试仍然通过。
+            byte[] payload = protocol < ProtocolInfo.v0_16_0
+                    ? new byte[]{1, 0, 0, 0, 0, 0, 0, 0, 7}
+                    : new byte[]{2, 14};
+            AnimatePacket packet = new AnimatePacket();
+            packet.protocol = protocol;
+            packet.setBuffer(payload, 0);
+            packet.decode();
+
+            assertAll("protocol=" + protocol,
+                    () -> assertEquals(1, packet.action),
+                    () -> assertEquals(7L, packet.eid),
+                    () -> assertEquals(payload.length, packet.getOffset())
+            );
+        }
+    }
+
+    @Test
     @DisplayName("Animate 应从 1.1.0 开始附带尾部 float")
     void animateShouldIncludeFloatFrom110() {
         AnimatePacket packet100 = new AnimatePacket();
@@ -1028,7 +1066,7 @@ class Legacy100PacketTest {
         packet100.encode();
 
         BinaryStream expected100 = new BinaryStream();
-        expected100.putUnsignedVarInt(0x80);
+        expected100.putVarInt(0x80);
         expected100.putVarLong(7L);
 
         AnimatePacket packet110 = new AnimatePacket();
@@ -1039,7 +1077,7 @@ class Legacy100PacketTest {
         packet110.encode();
 
         BinaryStream expected110 = new BinaryStream();
-        expected110.putUnsignedVarInt(0x80);
+        expected110.putVarInt(0x80);
         expected110.putVarLong(7L);
         expected110.putLFloat(1.25f);
 
