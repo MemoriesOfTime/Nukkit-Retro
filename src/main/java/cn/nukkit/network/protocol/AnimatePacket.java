@@ -17,7 +17,7 @@ public class AnimatePacket extends DataPacket {
             this.action = this.getByte();
             this.eid = this.getLong();
         } else {
-            this.action = (int) this.getVarInt();
+            this.action = this.getVarInt();
             this.eid = getVarLong();
         }
         if (this.protocol >= ProtocolInfo.v1_1_0 && (this.action & 0x80) != 0) {
