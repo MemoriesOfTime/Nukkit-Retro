@@ -52,13 +52,22 @@ public class MoveEntityPacket extends DataPacket {
     public void encode() {
         this.reset();
         if ((ProtocolInfo.isBefore0160(this.protocol))) {
+            if(this.protocol <= ProtocolInfo.v0_14_3){
+                this.putInt( 1 );
+            }
             this.putLong(this.eid);
             this.putFloat((float) this.x);
             this.putFloat((float) this.y);
             this.putFloat((float) this.z);
-            this.putByte((byte) (this.pitch / (360d / 256d)));
-            this.putByte((byte) (this.yaw / (360d / 256d)));
-            this.putByte((byte) (this.headYaw / (360d / 256d)));
+            if(this.protocol <= ProtocolInfo.v0_14_3) {
+                this.putFloat((float) this.yaw);
+                this.putFloat((float) this.headYaw);
+                this.putFloat((float) this.pitch);
+            }else{
+                this.putByte((byte) (this.pitch / (360d / 256d)));
+                this.putByte((byte) (this.yaw / (360d / 256d)));
+                this.putByte((byte) (this.headYaw / (360d / 256d)));
+            }
         } else {
             this.putVarLong(this.eid);
             this.putVector3f((float) this.x, (float) this.y, (float) this.z);
