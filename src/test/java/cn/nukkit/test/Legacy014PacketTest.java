@@ -26,6 +26,7 @@ import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.UUID;
 
@@ -43,6 +44,101 @@ class Legacy014PacketTest {
             Item.init();
         }
         Biome.init();
+    }
+
+    @Test
+    @DisplayName("MoveEntity 应按旧版实体数量和浮点旋转角格式编解码")
+    void moveEntityShouldUseClassicLayout() {
+        // Historical layout: big-endian count, eid, position, yaw, headYaw, pitch.
+        byte[] payload = ByteBuffer.allocate(36)
+                .putInt(1).putLong(777L)
+                .putFloat(1.25f).putFloat(65.5f).putFloat(-3.75f)
+                .putFloat(90.5f).putFloat(180.25f).putFloat(-45.5f)
+                .array();
+
+        for (int protocol : ProtocolInfo.SUPPORTED_PROTOCOLS) {
+            if (protocol > ProtocolInfo.v0_14_3) {
+                continue;
+            }
+            MoveEntityPacket packet = new MoveEntityPacket();
+            packet.protocol = protocol;
+            packet.setBuffer(payload, 0);
+            packet.decode();
+
+            assertAll("protocol " + protocol,
+                    () -> assertEquals(777L, packet.eid),
+                    () -> assertEquals(1.25, packet.x),
+                    () -> assertEquals(65.5, packet.y),
+                    () -> assertEquals(-3.75, packet.z),
+                    () -> assertEquals(90.5, packet.yaw),
+                    () -> assertEquals(180.25, packet.headYaw),
+                    () -> assertEquals(-45.5, packet.pitch),
+                    () -> assertEquals(payload.length, packet.getOffset())
+            );
+            packet.encode();
+            assertArrayEquals(payload, Arrays.copyOfRange(packet.getBuffer(), 1, packet.getBuffer().length));
+        }
+    }
+
+    @Test
+    @DisplayName("MoveEntity 在 0.15 及以后应保留原有编解码格式")
+    void moveEntityShouldPreserveNewerLayouts() {
+        for (int protocol : ProtocolInfo.SUPPORTED_PROTOCOLS) {
+            if (protocol <= ProtocolInfo.v0_14_3) {
+                continue;
+            }
+            MoveEntityPacket packet = new MoveEntityPacket();
+            packet.protocol = protocol;
+            packet.eid = 777L;
+            packet.x = 1.25;
+            packet.y = 65.5;
+            packet.z = -3.75;
+            packet.yaw = 90;
+            packet.headYaw = 180;
+            packet.pitch = 45;
+            packet.flags = 3;
+            packet.encode();
+
+            if (ProtocolInfo.isBefore0160(protocol)) {
+                byte[] payload = ByteBuffer.allocate(23)
+                        .putLong(777L)
+                        .putFloat(1.25f).putFloat(65.5f).putFloat(-3.75f)
+                        .put((byte) 32).put((byte) 64).put((byte) 128)
+                        .array();
+                assertArrayEquals(payload, Arrays.copyOfRange(packet.getBuffer(), 1, packet.getBuffer().length));
+            }
+
+            MoveEntityPacket decoded = new MoveEntityPacket();
+            decoded.protocol = protocol;
+            decoded.setBuffer(packet.getBuffer(), 1);
+            decoded.decode();
+            assertAll("protocol " + protocol,
+                    () -> assertEquals(packet.eid, decoded.eid),
+                    () -> assertEquals(packet.x, decoded.x),
+                    () -> assertEquals(packet.y, decoded.y),
+                    () -> assertEquals(packet.z, decoded.z),
+                    () -> assertEquals(packet.yaw, decoded.yaw),
+                    () -> assertEquals(packet.headYaw, decoded.headYaw),
+                    () -> assertEquals(packet.pitch, decoded.pitch),
+                    () -> assertEquals(protocol >= ProtocolInfo.v1_1_0 ? packet.flags : 0, decoded.flags),
+                    () -> assertEquals(packet.getBuffer().length, decoded.getOffset())
+            );
+        }
+    }
+
+    @Test
+    @DisplayName("MoveEntity 单实体接口应拒绝无法表示的旧版实体数量")
+    void moveEntityShouldRejectUnsupportedClassicEntityCounts() {
+        for (int count : new int[]{-1, 0, 2, Integer.MAX_VALUE}) {
+            BinaryStream input = new BinaryStream();
+            input.putInt(count);
+            input.put(new byte[64]);
+
+            MoveEntityPacket packet = new MoveEntityPacket();
+            packet.protocol = ProtocolInfo.v0_14_3;
+            packet.setBuffer(input.getBuffer(), 0);
+            assertThrows(IllegalArgumentException.class, packet::decode);
+        }
     }
 
     private static cn.nukkit.level.Level newLevelWithChunk(int chunkX, int chunkZ, cn.nukkit.level.format.FullChunk chunk) throws Exception {
