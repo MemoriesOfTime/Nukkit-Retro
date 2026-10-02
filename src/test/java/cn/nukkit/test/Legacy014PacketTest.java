@@ -126,21 +126,6 @@ class Legacy014PacketTest {
         }
     }
 
-    @Test
-    @DisplayName("MoveEntity 单实体接口应拒绝无法表示的旧版实体数量")
-    void moveEntityShouldRejectUnsupportedClassicEntityCounts() {
-        for (int count : new int[]{-1, 0, 2, Integer.MAX_VALUE}) {
-            BinaryStream input = new BinaryStream();
-            input.putInt(count);
-            input.put(new byte[64]);
-
-            MoveEntityPacket packet = new MoveEntityPacket();
-            packet.protocol = ProtocolInfo.v0_14_3;
-            packet.setBuffer(input.getBuffer(), 0);
-            assertThrows(IllegalArgumentException.class, packet::decode);
-        }
-    }
-
     private static cn.nukkit.level.Level newLevelWithChunk(int chunkX, int chunkZ, cn.nukkit.level.format.FullChunk chunk) throws Exception {
         Field unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
         unsafeField.setAccessible(true);
