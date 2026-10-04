@@ -266,6 +266,13 @@ public interface ProtocolInfo {
         return SUPPORTED_PROTOCOLS.contains(protocol);
     }
 
+    static boolean isProtocolInRange(int protocol, int minProtocol, int maxProtocol) {
+        if (protocol < minProtocol) {
+            return false;
+        }
+        return maxProtocol < Math.max(0, minProtocol) || protocol <= maxProtocol;
+    }
+
     static boolean isLegacyProtocol(int protocol) {
         return protocol < v1_1_3;
     }

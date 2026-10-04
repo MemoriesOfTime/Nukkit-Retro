@@ -26,6 +26,12 @@ network:
  #AsyncTasksを圧縮に使います. 0.5か1tick(1tick=0.05秒)遅れ、メインスレッドCPU負荷を減らします。
  async-compression: false
 
+game-feature-settings:
+ #クライアントの参加を許可する最小プロトコルバージョン (0 = 無制限)
+ multiversion-min-protocol: 0
+ #クライアントの参加を許可する最大プロトコルバージョン (-1 = 無制限)
+ multiversion-max-protocol: -1
+
 debug:
  #1より大きいと、コンソールにデバッグメッセージが表示されます
  level: 1
