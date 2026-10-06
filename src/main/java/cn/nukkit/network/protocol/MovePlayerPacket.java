@@ -69,7 +69,11 @@ public class MovePlayerPacket extends DataPacket {
             this.putLFloat(this.yaw);
             this.putLFloat(this.headYaw);
         }
-        this.putByte(this.mode);
+        if (ProtocolInfo.isBefore0160(this.protocol)) {
+            this.putByte((byte) (this.mode != 0 ? 1 : 0));
+        }else{
+            this.putByte(this.mode);
+        }
         if (ProtocolInfo.isBefore0160(this.protocol)) {
             this.putByte(this.onGround ? (byte) 1 : 0);
         } else {
