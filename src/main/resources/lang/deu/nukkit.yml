@@ -26,6 +26,12 @@ network:
  #Nutze AsyncTask zur Komprimierung. Fügt halben Tick Verzögerung zu, weniger CPU Verbrauch im Main Theared
  async-compression: false
 
+game-feature-settings:
+ #Minimale Protokollversion, mit der Clients beitreten dürfen (0 = kein Limit)
+ multiversion-min-protocol: 0
+ #Maximale Protokollversion, mit der Clients beitreten dürfen (-1 = kein Limit)
+ multiversion-max-protocol: -1
+
 debug:
  #Wenn > 1, werden Debug-Nachrichten in der Konsole angezeigt
  level: 1

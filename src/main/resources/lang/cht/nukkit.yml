@@ -26,6 +26,13 @@ network:
  #非同步壓縮，緩解主線程CPU負載
  async-compression: false
 
+game-feature-settings:
+ #允許用戶端加入的最低協議版本（0 = 不限制）
+ #有效值為 28 (0.12.0) 到 113 (1.1.3)，詳見 ProtocolInfo
+ multiversion-min-protocol: 0
+ #允許用戶端加入的最高協議版本（-1 = 不限制）
+ multiversion-max-protocol: -1
+
 debug:
  #當調試級別 > 1 時，將在控制台顯示調試資訊
  level: 1

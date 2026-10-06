@@ -26,6 +26,13 @@ network:
  #Use AsyncTasks for compression. Adds half/one tick delay, less CPU load on main thread
  async-compression: false
 
+game-feature-settings:
+ #Minimum protocol version clients are allowed to join with (0 = no limit)
+ #Valid values are 28 (0.12.0) through 113 (1.1.3), see ProtocolInfo
+ multiversion-min-protocol: 0
+ #Maximum protocol version clients are allowed to join with (-1 = no limit)
+ multiversion-max-protocol: -1
+
 debug:
  #If > 1, it will show debug messages in the console
  level: 1

@@ -1910,6 +1910,17 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         break;
                     }
 
+                    if (!ProtocolInfo.isProtocolInRange(loginPacket.getProtocol(), this.server.getMinimumProtocol(), this.server.getMaximumProtocol())) {
+                        boolean outdatedClient = loginPacket.getProtocol() < this.server.getMinimumProtocol();
+
+                        PlayStatusPacket pk = new PlayStatusPacket();
+                        pk.protocol = ProtocolInfo.CURRENT_PROTOCOL;
+                        pk.status = outdatedClient ? PlayStatusPacket.LOGIN_FAILED_CLIENT : PlayStatusPacket.LOGIN_FAILED_SERVER;
+                        this.directDataPacket(pk);
+                        this.close("", outdatedClient ? "disconnectionScreen.outdatedClient" : "disconnectionScreen.outdatedServer", false);
+                        break;
+                    }
+
                     this.protocol = loginPacket.getProtocol();
 
                     this.username = TextFormat.clean(loginPacket.username);

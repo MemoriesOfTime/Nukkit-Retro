@@ -26,6 +26,12 @@ network:
  #Naudoti AsyncTasks suspaudimui. Prideda puse/vieno impulso vėlavimą, tačiau sumažina CPU naudojimą pagrindinėje serverio gijoje
  async-compression: false
 
+game-feature-settings:
+ #Mažiausia protokolo versija, su kuria klientai gali prisijungti (0 = be ribos)
+ multiversion-min-protocol: 0
+ #Didžiausia protokolo versija, su kuria klientai gali prisijungti (-1 = be ribos)
+ multiversion-max-protocol: -1
+
 debug:
  #Jeigu > 1, jis rodys derinimo pranešimus konsolėje
  level: 1

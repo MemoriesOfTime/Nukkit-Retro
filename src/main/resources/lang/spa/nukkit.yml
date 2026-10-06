@@ -26,6 +26,12 @@ network:
  #Usar AsyncTasks para comprimir. Añade un retraso de medio tick, reduce el consumo de CPU
  async-compression: false
 
+game-feature-settings:
+ #Versión mínima de protocolo con la que los clientes pueden entrar (0 = sin límite)
+ multiversion-min-protocol: 0
+ #Versión máxima de protocolo con la que los clientes pueden entrar (-1 = sin límite)
+ multiversion-max-protocol: -1
+
 debug:
  #Si es mayor que 1, mostrara mensajes de depuración en la consola
  level: 1

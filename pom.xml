@@ -62,9 +62,12 @@
 
     <dependencies>
         <dependency>
+            <!-- Must stay on 1.x: jline 2.14.6 (AnsiWindowsTerminal) links against
+                 AnsiConsole.wrapOutputStream(OutputStream), which jansi 2.x removed.
+                 A 2.x jar crashes server startup on Windows with NoSuchMethodError. -->
             <groupId>org.fusesource.jansi</groupId>
             <artifactId>jansi</artifactId>
-            <version>2.4.2</version>
+            <version>1.18</version>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
@@ -144,7 +147,7 @@
         <plugins>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.1</version>
+                <version>3.8.1</version>
                 <configuration>
                     <source>${maven.compiler.source}</source>
                     <target>${maven.compiler.target}</target>
@@ -278,5 +281,29 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>release-8-on-modern-jdk</id>
+            <activation>
+                <jdk>[9,)</jdk>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>default-compile</id>
+                                <configuration>
+                                    <release>8</release>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

@@ -26,6 +26,12 @@ network:
  #압축할 때 AsyncTasks를 사용합니다. 0.5틱/1틱 딜레이를 추가합니다. 메인 스레드에 더 적은 CPU를 사용합니다
  async-compression: false
 
+game-feature-settings:
+ #클라이언트 접속을 허용하는 최소 프로토콜 버전 (0 = 제한 없음)
+ multiversion-min-protocol: 0
+ #클라이언트 접속을 허용하는 최대 프로토콜 버전 (-1 = 제한 없음)
+ multiversion-max-protocol: -1
+
 debug:
  #설정값이 1보다 크면, 콘솔 메시지에 디버그 메시지를 표시합니다
  level: 1

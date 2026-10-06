@@ -139,6 +139,10 @@ public class Server {
 
     private int maxPlayers;
 
+    private int minimumProtocol = 0;
+
+    private int maximumProtocol = ProtocolInfo.CURRENT_PROTOCOL;
+
     private boolean autoSave;
 
     private RCON rcon;
@@ -316,6 +320,10 @@ public class Server {
 
         this.networkCompressionLevel = (int) this.getConfig("network.compression-level", 7);
         this.networkCompressionAsync = (boolean) this.getConfig("network.async-compression", true);
+
+        this.minimumProtocol = (int) this.getConfig("game-feature-settings.multiversion-min-protocol", 0);
+        int configMaxProtocol = (int) this.getConfig("game-feature-settings.multiversion-max-protocol", -1);
+        this.maximumProtocol = configMaxProtocol == -1 ? ProtocolInfo.CURRENT_PROTOCOL : configMaxProtocol;
 
         this.autoTickRate = (boolean) this.getConfig("level-settings.auto-tick-rate", true);
         this.autoTickRateLimit = (int) this.getConfig("level-settings.auto-tick-rate-limit", 20);
@@ -1169,6 +1177,14 @@ public class Server {
 
     public int getMaxPlayers() {
         return maxPlayers;
+    }
+
+    public int getMinimumProtocol() {
+        return minimumProtocol;
+    }
+
+    public int getMaximumProtocol() {
+        return maximumProtocol;
     }
 
     public int getPort() {

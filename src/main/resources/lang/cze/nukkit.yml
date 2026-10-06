@@ -27,6 +27,12 @@ network:
  #Použijte AsyncTask pro kompresi. Přidá polovinu/jeden tick zpoždění, méně CPU zatížení na hlavní vlákno
  async-compression: false
 
+game-feature-settings:
+ #Minimální verze protokolu, se kterou se klienti mohou připojit (0 = bez limitu)
+ multiversion-min-protocol: 0
+ #Maximální verze protokolu, se kterou se klienti mohou připojit (-1 = bez limitu)
+ multiversion-max-protocol: -1
+
 debug:
  #Pokud je nastavena 1, console posílá debug zprávy
  level: 1
